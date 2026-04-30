@@ -87,7 +87,7 @@ class Mission
 			side="West";
 			class Entities
 			{
-				items=10;
+				items=12;
 				class Item0
 				{
 					dataType="Object";
@@ -289,6 +289,46 @@ class Mission
 					id=15;
 					type="B_Soldier_F";
 					atlOffset=-18.013569;
+				};
+				class Item10
+				{
+					dataType="Object";
+					class PositionInfo
+					{
+						position[]={14531.8,0,16685.301};
+					};
+					side="West";
+					flags=5;
+					class Attributes
+					{
+						init="this spawn { params ['_unit']; waitUntil { local _unit && {!isNil 'KFH_fnc_forceInitialStarterLoadout'} }; [_unit] call KFH_fnc_forceInitialStarterLoadout; };";
+						name="KFH_Charlie_Rifleman";
+						description="Patrol Rifleman";
+						isPlayable=1;
+					};
+					id=16;
+					type="B_Soldier_F";
+					atlOffset=-17.950001;
+				};
+				class Item11
+				{
+					dataType="Object";
+					class PositionInfo
+					{
+						position[]={14516.4,0,16685.9};
+					};
+					side="West";
+					flags=5;
+					class Attributes
+					{
+						init="this spawn { params ['_unit']; waitUntil { local _unit && {!isNil 'KFH_fnc_forceInitialStarterLoadout'} }; [_unit] call KFH_fnc_forceInitialStarterLoadout; };";
+						name="KFH_Charlie_Medic";
+						description="Patrol Medic";
+						isPlayable=1;
+					};
+					id=17;
+					type="B_Soldier_F";
+					atlOffset=-17.950001;
 				};
 			};
 			class Attributes

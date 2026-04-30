@@ -391,6 +391,19 @@ KFH_fnc_getAliveHumanPlayers = {
     ([] call KFH_fnc_getHumanPlayers) select { alive _x }
 };
 
+KFH_fnc_getMissionMaxPlayers = {
+    private _configured = getNumber (missionConfigFile >> "Header" >> "maxPlayers");
+    if (_configured <= 0) then {
+        _configured = missionNamespace getVariable ["KFH_targetPlayers", KFH_targetPlayers];
+    };
+
+    (_configured max 1)
+};
+
+KFH_fnc_getTargetPlayers = {
+    missionNamespace getVariable ["KFH_targetPlayers", [] call KFH_fnc_getMissionMaxPlayers]
+};
+
 KFH_fnc_getScalingPlayerCount = {
     private _humans = count ([] call KFH_fnc_getHumanPlayers);
     private _override = missionNamespace getVariable ["KFH_scalingPlayerCountOverride", -1];
@@ -2635,7 +2648,7 @@ KFH_fnc_startPatrolVehicleBoost = {
 KFH_fnc_spawnPatrolVehicles = {
     params ["_markerName"];
 
-    private _players = (missionNamespace getVariable ["KFH_targetPlayers", KFH_targetPlayers]) max 1;
+    private _players = ([] call KFH_fnc_getTargetPlayers) max 1;
     private _perPlayers = (missionNamespace getVariable ["KFH_startPatrolVehiclePerPlayers", 2]) max 1;
     private _maxVehicles = missionNamespace getVariable ["KFH_startPatrolVehicleMax", 5];
     private _vehicleCount = (ceil (_players / _perPlayers)) min _maxVehicles;
@@ -5078,7 +5091,7 @@ KFH_fnc_addSideCacheATCargo = {
 
 KFH_fnc_getRewardPlayerCount = {
     private _scalingPlayers = [] call KFH_fnc_getScalingPlayerCount;
-    (_scalingPlayers max 1) min 10
+    (_scalingPlayers max 1) min ([] call KFH_fnc_getTargetPlayers)
 };
 
 KFH_fnc_addRewardHelmets = {
@@ -7821,7 +7834,7 @@ KFH_fnc_scaledEnemyCount = {
     params ["_baseCount"];
 
     private _players = [] call KFH_fnc_getScalingPlayerCount;
-    private _targetPlayers = missionNamespace getVariable ["KFH_targetPlayers", 10];
+    private _targetPlayers = [] call KFH_fnc_getTargetPlayers;
     private _factor = (((_players max 1) / _targetPlayers) max 0.4) min 1.0;
     private _threatScale = [] call KFH_fnc_getThreatScale;
 
@@ -8827,7 +8840,9 @@ KFH_fnc_serverInit = {
     [] call KFH_fnc_applyThreatScaleParam;
     [] call KFH_fnc_applyEnemyAccuracyPreset;
     ["start"] call KFH_fnc_playStoryBeatOnce;
-    ["KFH_targetPlayers", missionNamespace getVariable ["KFH_targetPlayers", KFH_targetPlayers]] call KFH_fnc_setState;
+    private _targetPlayers = [] call KFH_fnc_getMissionMaxPlayers;
+    missionNamespace setVariable ["KFH_targetPlayers", _targetPlayers, true];
+    ["KFH_targetPlayers", _targetPlayers] call KFH_fnc_setState;
     missionNamespace setVariable ["KFH_scalingTestAllyCount", _scalingTestAllies, true];
     missionNamespace setVariable ["KFH_scalingTestAllies", [], true];
     missionNamespace setVariable ["KFH_scalingPlayerCountOverride", if (_scalingTestAllies > 0) then { 1 + _scalingTestAllies } else { -1 }, true];
@@ -9598,7 +9613,7 @@ KFH_fnc_clientHudLoop = {
         private _storyObjective = missionNamespace getVariable ["KFH_storyObjective", "RETURN TO BASE"];
         private _supplyLineStatus = missionNamespace getVariable ["KFH_supplyLineStatus", "0/0 ONLINE"];
         private _returnDangerLabel = missionNamespace getVariable ["KFH_returnDangerLabel", "LOW"];
-        private _targetPlayers = missionNamespace getVariable ["KFH_targetPlayers", 10];
+        private _targetPlayers = [] call KFH_fnc_getTargetPlayers;
         private _alive = count (([] call KFH_fnc_getHumanPlayers) select { alive _x });
         private _downed = count ([] call KFH_fnc_getIncapacitatedPlayers);
         private _phaseLabel = toUpper _phase;

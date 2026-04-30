@@ -1,6 +1,6 @@
 author = "MobmateTeam";
 onLoadName = "KFH_Patrol_LWH_co10";
-onLoadMission = "10-player PvEvE route survival focused on pressure, checkpoints, and extraction.";
+onLoadMission = "12-player PvEvE route survival focused on pressure, checkpoints, and extraction.";
 loadScreen = "";
 overviewText = "Outbreak patrol survival: take the long way home through PvEvE checkpoints.";
 disabledAI = 1;
@@ -28,7 +28,7 @@ class Header
 {
     gameType = Coop;
     minPlayers = 1;
-    maxPlayers = 10;
+    maxPlayers = 12;
 };
 
 class Params
@@ -85,8 +85,8 @@ class Params
     class KFH_ScalingTestAllies
     {
         title = "KFH_Patrol_LWH_co10 AI Scaling Test Allies";
-        values[] = {0,3,7};
-        texts[] = {"Disabled","3 AI allies / 4-player scale","7 AI allies / 8-player scale"};
+        values[] = {0,3,7,11};
+        texts[] = {"Disabled","3 AI allies / 4-player scale","7 AI allies / 8-player scale","11 AI allies / 12-player scale"};
         default = 0;
     };
 };

@@ -1,4 +1,4 @@
-KFH_targetPlayers = 10;
+KFH_targetPlayers = 12;
 KFH_difficultyParamDefault = 1;
 KFH_difficultyNames = ["easy", "normal", "hard", "veryHard"];
 KFH_enemyAccuracyParamDefault = 1;
@@ -379,7 +379,7 @@ KFH_civilianKillExplosionRadius = 14;
 KFH_startPatrolVehicleClass = "C_Quadbike_01_F";
 KFH_startPatrolVehicleFuelMin = 0.55;
 KFH_startPatrolVehicleFuelMax = 0.65;
-KFH_startPatrolVehicleMax = 5;
+KFH_startPatrolVehicleMax = 6;
 KFH_startPatrolVehiclePerPlayers = 2;
 KFH_startPatrolVehicleGraceSeconds = 8;
 KFH_startPatrolVehicleSpeedBoost = 1.25;
@@ -451,8 +451,8 @@ KFH_checkpointDressingSets = [
 ];
 KFH_checkpointMobilityVehiclesEnabled = true;
 KFH_checkpointMobilityVehicleCount = 2;
-KFH_checkpointMobilityVehicleCountByScale = [1, 1, 2, 2, 2];
-KFH_checkpointMobilityVehicleLateMax = 1;
+KFH_checkpointMobilityVehicleCountByScale = [1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3];
+KFH_checkpointMobilityVehicleLateMax = 2;
 KFH_checkpointMobilityVehicleFuelMin = 0.18;
 KFH_checkpointMobilityVehicleFuelMax = 0.24;
 KFH_checkpointMobilityVehicleClasses = [

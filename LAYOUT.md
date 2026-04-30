@@ -4,7 +4,7 @@ This is the concrete Eden layout plan for `KFH_Patrol_LWH_co10`.
 
 Assumptions:
 
-- 10-player PvE target
+- 12-player PvE target
 - Vanilla-first assets
 - `@CBA_A3` is an allowed required dependency
 - Altis is used as the first practical staging map
@@ -15,7 +15,7 @@ The route should feel like a push into a contaminated industrial cut or quarry a
 
 What we want to test:
 
-- whether 10 players can move as one stack without the route becoming trivial
+- whether 12 players can move as one stack without the route becoming trivial
 - whether 3-4 player split pushes are occasionally useful
 - whether reinforcement pressure makes turtling feel dangerous
 - whether returning to extraction feels earned instead of like cleanup
@@ -69,7 +69,7 @@ Recommended spawn flank markers:
 
 Place:
 
-- 10 BLUFOR playable slots in 2 nearby groups of 5
+- 12 BLUFOR playable slots in 3 nearby groups of 4
 - 1 ammo source
 - 1 medical source
 - 1 repair or toolkit point
@@ -130,7 +130,7 @@ Place:
 - fewer flank options than CP2
 - one obvious fallback line toward extraction
 
-## Ten-Player Role Intention
+## Twelve-Player Role Intention
 
 The current draft slot split is:
 
