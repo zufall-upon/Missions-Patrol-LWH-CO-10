@@ -13,7 +13,7 @@ Move from checkpoint to checkpoint, hold against infected waves, recover supplie
 - Mode: Co-op multiplayer
 - Players: 1-10
 - Status: playable, still actively tuned through live play
-- Distribution: Steam Workshop is recommended for players; this repository includes source files and the latest packaged PBO
+- Distribution: Steam Workshop is recommended for players; this repository includes source files and packaged PBO variants
 
 ## Required Workshop Items
 
@@ -34,13 +34,16 @@ No Arma 3 DLC is strictly required to load the mission. The mission is built on 
 
 Some optional loot candidates may use DLC-class equipment when that content is available. These are not intended to be hard requirements.
 
-## Packaged PBO
+## Packaged PBO Variants
 
-The latest packaged mission PBO is included in the repository root:
+The latest packaged mission PBOs are included in the repository root:
 
 - `KFH_Patrol_LWH_co10.Altis.pbo`
+- `KFH_Patrol_LWH_co10.Stratis.pbo`
+- `KFH_Patrol_LWH_co10.Tanoa.pbo`
+- `KFH_Patrol_LWH_co10.Malden.pbo`
 
-Server admins can use this file directly, while mission authors can inspect or modify the unpacked source files in this repository.
+Server admins can use these files directly, while mission authors can inspect or modify the unpacked source files in this repository.
 
 <a id="english"></a>
 ## English
