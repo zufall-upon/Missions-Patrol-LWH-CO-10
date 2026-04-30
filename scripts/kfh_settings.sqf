@@ -69,6 +69,7 @@ KFH_extractDangerWaveStep = 2;
 KFH_extractGunnerChance = 0.1;
 KFH_extractHeavyChance = 0.05;
 KFH_extractSupplyCarrierChance = 0.06;
+KFH_extractSpawnFromFinalCheckpoint = true;
 KFH_extractFlareRequired = true;
 KFH_extractFlareRadius = 45;
 KFH_extractFlareReminderSeconds = 45;
@@ -239,6 +240,9 @@ KFH_envTrafficSpawnUntilCheckpoint = 6;
 KFH_envTrafficMilitaryChance = 0.45;
 KFH_envTrafficMilitaryDelaySeconds = 55;
 KFH_envTrafficMilitaryStartCheckpoint = 3;
+KFH_envTrafficMilitaryProgressEnabled = true;
+KFH_envTrafficMilitaryInitialScale = 0.25;
+KFH_envTrafficMilitaryFullCheckpoint = 6;
 KFH_envTrafficMilitaryArmedChance = 0.42;
 KFH_envTrafficMilitaryArmorShare = 0.10;
 KFH_envTrafficMilitaryMortarShare = 0.16;
@@ -619,7 +623,8 @@ KFH_starterHeadgear = [
 ];
 KFH_starterSidearms = [
     ["hgun_P07_F", "16Rnd_9x21_Mag", "acc_flashlight_pistol"],
-    ["hgun_Rook40_F", "16Rnd_9x21_Mag", "acc_flashlight_pistol"]
+    ["hgun_Rook40_F", "16Rnd_9x21_Mag", "acc_flashlight_pistol"],
+    ["hgun_PDW2000_F", "30Rnd_9x21_Mag", "optic_ACO_grn_smg"]
 ];
 KFH_cupStarterUniforms = [
     "rhs_uniform_cu_ocp",
@@ -647,6 +652,12 @@ KFH_cupStarterPreferredChance = 1;
 KFH_cupStarterMissingWarning = true;
 KFH_starterMagCount = 6;
 KFH_starterFirstAidCount = 3;
+KFH_startSidearmCacheCoverageRatio = 1;
+KFH_startSidearmCacheCoverageByDifficulty = [1, 1, 0.33, 0];
+KFH_startSidearmCacheBundles = [
+    ["hgun_PDW2000_F", "30Rnd_9x21_Mag", 10, ["optic_ACO_grn_smg", "acc_flashlight"]]
+];
+KFH_startToolKitCountsByDifficulty = [0, 0, 0, 0];
 KFH_starterApplyDelay = 0;
 KFH_starterRecheckDelay = 1.5;
 KFH_starterEnforceWindow = 12;
@@ -666,6 +677,17 @@ KFH_rewardCacheOffset = [11, 2, 0];
 KFH_rewardWeaponCoverageRatio = 0.75;
 KFH_rewardBackpackCoverageRatio = 0.35;
 KFH_rewardWeaponMagazinePlayerBonusInterval = 2;
+KFH_rewardPrePatrolATEnabled = true;
+KFH_rewardPrePatrolATLauncherCount = 2;
+KFH_rewardPrePatrolATBackpackCoverageRatio = 0.25;
+KFH_rewardPrePatrolATBackpackMin = 2;
+KFH_rewardPrePatrolATBackpacks = [
+    "B_Carryall_mcamo",
+    "B_Carryall_oli",
+    "B_Bergen_mcamo_F",
+    "B_Bergen_tna_F",
+    "B_Bergen_hex_F"
+];
 KFH_rewardHelmetPool = [
     "H_HelmetB_light",
     "H_HelmetB_plain_mcamo",
@@ -791,7 +813,18 @@ KFH_knownBrokenSpecialClasses = [
     "Zombie_Special_GREENFOR_Leaper_2"
 ];
 KFH_leaperProxyEnabled = true;
-KFH_leaperProxyAnimSpeed = 1.12;
+KFH_leaperProxyCrawlEnabled = true;
+KFH_leaperProxyAnimSpeed = 1.65;
+KFH_leaperProxyRetargetSeconds = 0.12;
+KFH_leaperProxyPounceMinDistance = 3.5;
+KFH_leaperProxyPounceMaxDistance = 18;
+KFH_leaperProxyPounceCooldown = 2.2;
+KFH_leaperProxyPounceForwardVelocity = 10.5;
+KFH_leaperProxyPounceUpVelocity = 0.65;
+KFH_leaperProxyHumanAnchorEnabled = true;
+KFH_leaperProxyHumanAnchorCheckpointDistance = 260;
+KFH_leaperProxyHumanAnchorMinDistance = 65;
+KFH_leaperProxyHumanAnchorMaxDistance = 135;
 KFH_checkpointBloaterPerWaveEnabled = true;
 KFH_checkpointBloaterPerWaveIgnoreBudget = true;
 KFH_checkpointSpecialWaveRampCycle = 10;
@@ -876,8 +909,8 @@ KFH_rushSupplyCarrierBackpacks = [
     "B_Kitbag_rgr"
 ];
 KFH_rangedEnemyLoadouts = [
-    ["SMG_01_F", "30Rnd_45ACP_Mag_SMG_01", ["optic_Aco_smg", "acc_flashlight"], 3],
     ["SMG_02_F", "30Rnd_9x21_Mag_SMG_02", ["optic_ACO_grn_smg", "acc_flashlight"], 3],
+    ["hgun_PDW2000_F", "30Rnd_9x21_Mag", ["optic_ACO_grn_smg", "acc_flashlight"], 4],
     ["arifle_TRG20_F", "30Rnd_556x45_Stanag", ["optic_Aco", "acc_flashlight"], 3]
 ];
 KFH_cupOptionalEnabled = true;
@@ -885,8 +918,9 @@ KFH_cupBanVanillaWhenAvailable = true;
 KFH_cupRewardPreferredChance = 1;
 KFH_cupRangedEnemyPreferredChance = 1;
 KFH_dynamicRhsRewardWeaponsEnabled = true;
-KFH_dynamicRhsRewardPreferredChance = 0.75;
-KFH_dynamicRhsRewardMaxPerCategory = 8;
+KFH_dynamicRhsRewardPreferredChance = 1;
+KFH_dynamicRhsRewardMaxPerCategory = 18;
+KFH_dynamicRhsRewardPriorityTokens = ["m249", "m240", "mk48", "minimi", "saw", "pkm", "pkp"];
 KFH_dynamicRhsRewardShotgunTokens = ["shotgun", "m590", "m1014", "saiga", "ks23", "ks-23"];
 KFH_dynamicRhsRewardMachinegunTokens = ["m249", "m240", "mk48", "pkm", "pkp", "rpk", "mg3", "m60", "minimi", "machinegun", "machine gun", "lmg", "mmg"];
 KFH_dynamicRhsRewardBattleRifleTokens = ["m14", "ebr", "sr25", "hk417", "g3", "fal", "scarh", "scar-h", "m110", "mk11", "svd", "svdp", "vss", "val"];
@@ -939,13 +973,25 @@ KFH_simpleLauncherBundles = [
     ["rhs_weap_M136", "rhs_m136_mag", 1],
     ["rhs_weap_m72a7", "rhs_m72a7_mag", 1]
 ];
+KFH_rewardPrePatrolATLauncherBundles = [
+    ["launch_NLAW_F", "NLAW_F", 1],
+    ["rhs_weap_M136", "rhs_m136_mag", 1],
+    ["rhs_weap_m72a7", "rhs_m72a7_mag", 1]
+];
 KFH_sideCacheAtLauncherBundles = [
     ["launch_B_Titan_short_F", "Titan_AT", 2],
     ["launch_RPG32_F", "RPG32_F", 3],
     ["launch_MRAWS_green_rail_F", "MRAWS_HEAT_F", 3],
-    ["rhs_weap_rpg7", "rhs_rpg7_PG7VL_mag", 4],
-    ["rhs_weap_M136", "rhs_m136_mag", 2],
-    ["rhs_weap_m72a7", "rhs_m72a7_mag", 2]
+    ["rhs_weap_rpg7", "rhs_rpg7_PG7VL_mag", 4]
+];
+KFH_sideCacheLargeBackpackCoverageRatio = 0.25;
+KFH_sideCacheLargeBackpackMin = 2;
+KFH_sideCacheLargeBackpacks = [
+    "B_Carryall_mcamo",
+    "B_Carryall_oli",
+    "B_Bergen_mcamo_F",
+    "B_Bergen_tna_F",
+    "B_Bergen_hex_F"
 ];
 KFH_sideCacheBonusMagazineCargo = [
     ["rhs_45Rnd_545X39_AK", 10],
@@ -1061,12 +1107,19 @@ KFH_staleEnemyRelocateMaxDistance = 190;
 KFH_staleEnemyRelocateCoverRadius = 95;
 KFH_staleEnemyRelocateCoverOffsetMin = 4;
 KFH_staleEnemyRelocateCoverOffsetMax = 9;
+KFH_staleEnemyObjectiveGraceDistance = 360;
+KFH_staleEnemyRelocateMaxObjectiveDistance = 260;
 KFH_staleEnemyRelocateCoverTypes = ["TREE", "SMALL TREE", "BUSH", "ROCK", "ROCKS", "HOUSE", "BUILDING", "WALL", "FENCE", "HIDE"];
 KFH_staleEnemyVisibleThreshold = 0.25;
 KFH_rushDebtEnabled = true;
 KFH_rushDebtMax = 24;
+KFH_rushDebtInterestEnabled = true;
+KFH_rushDebtInterestRatio = 0.25;
+KFH_rushDebtInterestMin = 1;
+KFH_rushDebtInterestMax = 4;
 KFH_waveRecycleOffscreenEnabled = true;
 KFH_waveRecycleObjectiveDistance = 240;
+KFH_waveRecycleForceObjectiveDistance = 420;
 KFH_waveRecycleHumanDistance = 260;
 KFH_tacticalPingLifetime = 45;
 KFH_tacticalPingMarkerColor = "ColorOrange";

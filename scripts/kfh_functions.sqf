@@ -404,6 +404,24 @@ KFH_fnc_getTargetPlayers = {
     missionNamespace getVariable ["KFH_targetPlayers", [] call KFH_fnc_getMissionMaxPlayers]
 };
 
+KFH_fnc_getNearestHumanReferenceUnit = {
+    params ["_origin"];
+
+    private _nearest = objNull;
+    private _nearestDistance = 1e10;
+    {
+        if (alive _x) then {
+            private _distance = _origin distance2D _x;
+            if (_distance < _nearestDistance) then {
+                _nearest = _x;
+                _nearestDistance = _distance;
+            };
+        };
+    } forEach ([] call KFH_fnc_getHumanReferenceUnits);
+
+    _nearest
+};
+
 KFH_fnc_getScalingPlayerCount = {
     private _humans = count ([] call KFH_fnc_getHumanPlayers);
     private _override = missionNamespace getVariable ["KFH_scalingPlayerCountOverride", -1];
@@ -511,6 +529,34 @@ KFH_fnc_playUiCue = {
     ];
 
     playSoundUI [_soundPath, _volume, _pitch, true];
+};
+
+KFH_fnc_playWaveStartWarning = {
+    [] spawn {
+        playSoundUI ["A3\Sounds_F\sfx\blip1.wss", 1.8, 1.28, true];
+        sleep 0.16;
+        playSoundUI ["A3\Sounds_F\sfx\blip1.wss", 1.45, 1.05, true];
+    };
+};
+
+KFH_fnc_playFinaleRushWarning = {
+    [] spawn {
+        playSoundUI ["A3\Sounds_F\sfx\alarm_independent.wss", 1.8, 1.28, true];
+        sleep 0.22;
+        playSoundUI ["A3\Sounds_F\sfx\blip1.wss", 2.1, 0.72, true];
+        sleep 0.18;
+        playSoundUI ["A3\Sounds_F\sfx\blip1.wss", 1.8, 0.58, true];
+    };
+};
+
+KFH_fnc_playBaseLostWarning = {
+    [] spawn {
+        playSoundUI ["A3\Sounds_F\sfx\blip1.wss", 2.6, 0.42, true];
+        sleep 0.34;
+        playSoundUI ["A3\Sounds_F\sfx\blip1.wss", 2.2, 0.34, true];
+        sleep 0.42;
+        playSoundUI ["A3\Sounds_F\sfx\blip1.wss", 1.9, 0.28, true];
+    };
 };
 
 KFH_fnc_playZombieCue = {
@@ -1567,9 +1613,10 @@ KFH_fnc_selectExistingWithOptionalPriority = {
 };
 
 KFH_fnc_selectMilitaryVehicleClass = {
-    private _armedChance = missionNamespace getVariable ["KFH_envTrafficMilitaryArmedChance", 0.7];
-    private _armorShare = missionNamespace getVariable ["KFH_envTrafficMilitaryArmorShare", 0.4];
-    private _mortarShare = missionNamespace getVariable ["KFH_envTrafficMilitaryMortarShare", 0.16];
+    private _progressScale = [] call KFH_fnc_getEnvMilitaryProgressScale;
+    private _armedChance = ((missionNamespace getVariable ["KFH_envTrafficMilitaryArmedChance", 0.7]) * _progressScale) min 1;
+    private _armorShare = ((missionNamespace getVariable ["KFH_envTrafficMilitaryArmorShare", 0.4]) * _progressScale) min 1;
+    private _mortarShare = ((missionNamespace getVariable ["KFH_envTrafficMilitaryMortarShare", 0.16]) * _progressScale) min 1;
     private _cupChance = missionNamespace getVariable ["KFH_cupVehiclePreferredChance", 0.78];
     private _cupArmorChance = missionNamespace getVariable ["KFH_cupArmorVehiclePreferredChance", _cupChance];
     private _roll = random 1;
@@ -1669,6 +1716,21 @@ KFH_fnc_getThreatScale = {
     missionNamespace getVariable ["KFH_threatScaleMultiplier", 1]
 };
 
+KFH_fnc_getEnvMilitaryProgressScale = {
+    if !(missionNamespace getVariable ["KFH_envTrafficMilitaryProgressEnabled", true]) exitWith { 1 };
+
+    private _currentCheckpoint = missionNamespace getVariable ["KFH_currentCheckpoint", 1];
+    private _startCheckpoint = missionNamespace getVariable ["KFH_envTrafficMilitaryStartCheckpoint", 3];
+    if (_currentCheckpoint < _startCheckpoint) exitWith { 0 };
+
+    private _fullCheckpoint = missionNamespace getVariable ["KFH_envTrafficMilitaryFullCheckpoint", missionNamespace getVariable ["KFH_envTrafficSpawnUntilCheckpoint", 6]];
+    private _initialScale = missionNamespace getVariable ["KFH_envTrafficMilitaryInitialScale", 0.25];
+    if (_fullCheckpoint <= _startCheckpoint) exitWith { 1 };
+
+    private _progress = (((_currentCheckpoint - _startCheckpoint) / ((_fullCheckpoint - _startCheckpoint) max 1)) max 0) min 1;
+    ((_initialScale + ((1 - _initialScale) * _progress)) max 0) min 1
+};
+
 KFH_fnc_applyEnvMilitarySpawnDiscipline = {
     params ["_groupRef"];
 
@@ -1711,7 +1773,8 @@ KFH_fnc_configureEnvMilitaryCrew = {
     } else {
         [_unit, false] call KFH_fnc_configureMilitaryInfantryLoadout;
     };
-    if ((random 1) < (missionNamespace getVariable ["KFH_envMilitaryATChance", 0.72])) then {
+    private _atChance = ((missionNamespace getVariable ["KFH_envMilitaryATChance", 0.72]) * ([] call KFH_fnc_getEnvMilitaryProgressScale)) min 1;
+    if ((random 1) < _atChance) then {
         [_unit] call KFH_fnc_giveMilitaryATLauncher;
     };
     _unit setSkill ((missionNamespace getVariable ["KFH_envMilitarySkillBase", 0.24]) + random (missionNamespace getVariable ["KFH_envMilitarySkillRandom", 0.16]));
@@ -2217,7 +2280,8 @@ KFH_fnc_spawnEnvMilitaryFootPatrol = {
     private _minSize = missionNamespace getVariable ["KFH_envMilitaryFootPatrolSizeMin", 2];
     private _maxSize = missionNamespace getVariable ["KFH_envMilitaryFootPatrolSizeMax", 4];
     private _threatScale = [] call KFH_fnc_getThreatScale;
-    private _count = ceil ((_minSize + floor (random (((_maxSize - _minSize) max 0) + 1))) * _threatScale);
+    private _progressScale = [] call KFH_fnc_getEnvMilitaryProgressScale;
+    private _count = (ceil ((_minSize + floor (random (((_maxSize - _minSize) max 0) + 1))) * _threatScale * _progressScale)) max 1;
     for "_i" from 1 to _count do {
         private _pos = _spawnPos getPos [2 + random 6, random 360];
         private _unit = _groupRef createUnit [selectRandom _crewClasses, _pos, [], 0, "FORM"];
@@ -2278,7 +2342,8 @@ KFH_fnc_spawnEnvMilitaryCheckpoint = {
     private _minGuards = missionNamespace getVariable ["KFH_envMilitaryCheckpointGuardMin", 2];
     private _maxGuards = missionNamespace getVariable ["KFH_envMilitaryCheckpointGuardMax", 4];
     private _threatScale = [] call KFH_fnc_getThreatScale;
-    private _count = ceil ((_minGuards + floor (random (((_maxGuards - _minGuards) max 0) + 1))) * _threatScale);
+    private _progressScale = [] call KFH_fnc_getEnvMilitaryProgressScale;
+    private _count = (ceil ((_minGuards + floor (random (((_maxGuards - _minGuards) max 0) + 1))) * _threatScale * _progressScale)) max 1;
     for "_i" from 1 to _count do {
         private _pos = _spawnPos getPos [6 + random 12, random 360];
         private _unit = _groupRef createUnit [selectRandom _crewClasses, _pos, [], 0, "FORM"];
@@ -2342,13 +2407,16 @@ KFH_fnc_spawnEnvSceneTick = {
     };
 
     if (_currentCheckpoint >= (missionNamespace getVariable ["KFH_envTrafficMilitaryStartCheckpoint", 3]) && {time >= (missionNamespace getVariable ["KFH_envTrafficMilitaryDelaySeconds", 55])}) then {
+        private _progressScale = [] call KFH_fnc_getEnvMilitaryProgressScale;
+        _milMax = ceil (_milMax * _progressScale);
         private _milPerTick = if (_isEarly) then {
             missionNamespace getVariable ["KFH_envSceneMilitaryPerTickEarly", 0]
         } else {
             missionNamespace getVariable ["KFH_envSceneMilitaryPerTickLate", 1]
         };
+        _milPerTick = ceil (_milPerTick * _progressScale);
         for "_i" from 1 to ((_milMax - _military) min _milPerTick) do {
-            if ((random 1) <= (missionNamespace getVariable ["KFH_envSceneMilitaryVehicleChance", 0.2])) then {
+            if ((random 1) <= ((missionNamespace getVariable ["KFH_envSceneMilitaryVehicleChance", 0.2]) * _progressScale)) then {
                 if !(isNull ([] call KFH_fnc_spawnEnvMilitaryScene)) then { _spawnedMilitary = _spawnedMilitary + 1; };
             };
         };
@@ -2358,8 +2426,8 @@ KFH_fnc_spawnEnvSceneTick = {
             !isNull _x && {(_x getVariable ["KFH_envRole", ""]) isEqualTo "militaryFootPatrol"}
         } count _envGroups;
         if (
-            _footPatrols < (ceil ((missionNamespace getVariable ["KFH_envMilitaryFootPatrolMax", 4]) * ([] call KFH_fnc_getThreatScale))) &&
-            {(random 1) <= (missionNamespace getVariable ["KFH_envMilitaryFootPatrolChance", 0.5])}
+            _footPatrols < (ceil ((missionNamespace getVariable ["KFH_envMilitaryFootPatrolMax", 4]) * ([] call KFH_fnc_getThreatScale) * _progressScale)) &&
+            {(random 1) <= ((missionNamespace getVariable ["KFH_envMilitaryFootPatrolChance", 0.5]) * _progressScale)}
         ) then {
             if !(isNull ([] call KFH_fnc_spawnEnvMilitaryFootPatrol)) then { _spawnedMilitary = _spawnedMilitary + 1; };
         };
@@ -2368,8 +2436,8 @@ KFH_fnc_spawnEnvSceneTick = {
             !isNull _x && {(_x getVariable ["KFH_envRole", ""]) isEqualTo "militaryCheckpoint"}
         } count (missionNamespace getVariable ["KFH_envTrafficGroups", []]);
         if (
-            _checkpoints < (ceil ((missionNamespace getVariable ["KFH_envMilitaryCheckpointMax", 3]) * ([] call KFH_fnc_getThreatScale))) &&
-            {(random 1) <= (missionNamespace getVariable ["KFH_envMilitaryCheckpointChance", 0.35])}
+            _checkpoints < (ceil ((missionNamespace getVariable ["KFH_envMilitaryCheckpointMax", 3]) * ([] call KFH_fnc_getThreatScale) * _progressScale)) &&
+            {(random 1) <= ((missionNamespace getVariable ["KFH_envMilitaryCheckpointChance", 0.35]) * _progressScale)}
         ) then {
             if !(isNull ([] call KFH_fnc_spawnEnvMilitaryCheckpoint)) then { _spawnedMilitary = _spawnedMilitary + 1; };
         };
@@ -2418,11 +2486,12 @@ KFH_fnc_envTrafficLoop = {
                     };
                 };
 
+                private _progressScale = [] call KFH_fnc_getEnvMilitaryProgressScale;
                 if (
                     time >= (missionNamespace getVariable ["KFH_envTrafficMilitaryDelaySeconds", 90]) &&
                     {_currentCheckpoint >= (missionNamespace getVariable ["KFH_envTrafficMilitaryStartCheckpoint", 3])} &&
-                    {(count _militaryGroups) < (missionNamespace getVariable ["KFH_envTrafficMaxMilitaryGroups", 2])} &&
-                    {(random 1) <= (missionNamespace getVariable ["KFH_envTrafficMilitaryChance", 0.45])}
+                    {(count _militaryGroups) < (ceil ((missionNamespace getVariable ["KFH_envTrafficMaxMilitaryGroups", 2]) * _progressScale))} &&
+                    {(random 1) <= ((missionNamespace getVariable ["KFH_envTrafficMilitaryChance", 0.45]) * _progressScale)}
                 ) then {
                     [] call KFH_fnc_spawnEnvMilitaryTraffic;
                 };
@@ -2727,7 +2796,7 @@ KFH_fnc_playStoryBeat = {
             ["BASE LOST"] call KFH_fnc_setStoryObjective;
             ["HQ: Bad news. Your original base is gone. Repeat, base is overrun. Arsenal may still be there, but it is not safe.", "STORY"] call KFH_fnc_appendRunEvent;
             ["HQ: 帰投予定基地は壊滅済みデス。装備庫だけは生きている可能性あり。行くか、脱出優先か判断して。"] call KFH_fnc_notifyAll;
-            ["A3\Sounds_F\sfx\alarm_independent.wss", 2.4, 0.75] remoteExecCall ["KFH_fnc_playUiCue", 0];
+            [] remoteExecCall ["KFH_fnc_playBaseLostWarning", 0];
         };
         case "finalCheckpoint": {
             ["ARSENAL OPTIONAL"] call KFH_fnc_setStoryObjective;
@@ -2895,7 +2964,7 @@ KFH_fnc_fillCheckpointSupplyCargo = {
 
         if (!_cupOnly) then {
             _ammo addMagazineCargoGlobal ["30Rnd_9x21_Mag", 12 + (_players * 2)];
-            _ammo addMagazineCargoGlobal ["30Rnd_45ACP_Mag_SMG_01", 8 + _players];
+            _ammo addMagazineCargoGlobal ["30Rnd_9x21_Mag_SMG_02", 8 + _players];
             _ammo addMagazineCargoGlobal ["30Rnd_556x45_Stanag", 8 + _players];
             [_ammo, "acc_flashlight", 2] call KFH_fnc_addOptionalItemCargo;
             [_ammo, "optic_Aco", 1] call KFH_fnc_addOptionalItemCargo;
@@ -2905,17 +2974,40 @@ KFH_fnc_fillCheckpointSupplyCargo = {
         _ammo addMagazineCargoGlobal ["SmokeShell", 3 + ceil (_players / 4)];
         _ammo addItemCargoGlobal ["FirstAidKit", 4 + _players];
 
-        if (missionNamespace getVariable ["KFH_cupOptionalEnabled", true]) then {
-            [_ammo, "rhs_weap_m4a1", 1] call KFH_fnc_addOptionalWeaponCargo;
-            [_ammo, "rhs_mag_30Rnd_556x45_M855A1_Stanag", 8 + _players] call KFH_fnc_addOptionalMagazineCargo;
-            [_ammo, "optic_Arco", 1] call KFH_fnc_addOptionalItemCargo;
-            [_ammo, "rhs_weap_ak74m", 1] call KFH_fnc_addOptionalWeaponCargo;
-            [_ammo, "rhs_30Rnd_545x39_7N10_AK", 8 + _players] call KFH_fnc_addOptionalMagazineCargo;
-            [_ammo, "rhs_acc_ekp1", 1] call KFH_fnc_addOptionalItemCargo;
-            if (_tier >= 2) then {
-                [_ammo, "rhs_weap_M136", 1] call KFH_fnc_addOptionalWeaponCargo;
-                [_ammo, "rhs_m136_mag", 1] call KFH_fnc_addOptionalMagazineCargo;
+        private _supplyVanillaBundles = switch (_tier) do {
+            case 1: {
+                [
+                    ["SMG_02_F", "30Rnd_9x21_Mag_SMG_02", 8, ["optic_ACO_grn_smg", "acc_flashlight"]],
+                    ["hgun_PDW2000_F", "30Rnd_9x21_Mag", 8, ["optic_ACO_grn_smg", "acc_flashlight"]]
+                ]
             };
+            case 2: {
+                [
+                    ["arifle_TRG21_F", "30Rnd_556x45_Stanag", 10, ["optic_Aco", "acc_flashlight"]],
+                    ["arifle_Mk20C_F", "30Rnd_556x45_Stanag", 10, ["optic_ACO_grn", "acc_pointer_IR"]]
+                ]
+            };
+            default {
+                [
+                    ["LMG_Mk200_F", "200Rnd_65x39_cased_Box", 3, ["optic_Hamr", "acc_pointer_IR"]],
+                    ["arifle_MX_SW_F", "100Rnd_65x39_caseless_mag", 4, ["optic_Hamr", "acc_pointer_IR"]]
+                ]
+            };
+        };
+        private _supplyOptionalBundles = (missionNamespace getVariable [format ["KFH_cupRewardWeaponBundlesTier%1", _tier], []]) + ([_tier] call KFH_fnc_getDynamicRhsRewardBundles);
+        [_ammo, _supplyVanillaBundles, _supplyOptionalBundles, 1 + floor (_players / 6)] call KFH_fnc_addRewardWeaponBundlePool;
+        [_ammo, 1, true] call KFH_fnc_addRecentRewardBundleCargo;
+
+        if ([_checkpointIndex] call KFH_fnc_isPrePatrolRewardCheckpoint) then {
+            private _atCount = missionNamespace getVariable ["KFH_rewardPrePatrolATLauncherCount", 2];
+            [_ammo, _atCount, missionNamespace getVariable ["KFH_rewardPrePatrolATLauncherBundles", []]] call KFH_fnc_addLauncherBundlesCargo;
+            [
+                _ammo,
+                missionNamespace getVariable ["KFH_rewardPrePatrolATBackpacks", []],
+                missionNamespace getVariable ["KFH_rewardPrePatrolATBackpackCoverageRatio", 0.25],
+                missionNamespace getVariable ["KFH_rewardPrePatrolATBackpackMin", 2]
+            ] call KFH_fnc_addScaledBackpackCargo;
+            [format ["Checkpoint %1 supply received guaranteed pre-patrol AT (%2 launcher(s)).", _checkpointIndex, _atCount]] call KFH_fnc_log;
         };
     };
 
@@ -2936,6 +3028,47 @@ KFH_fnc_fillCheckpointSupplyCargo = {
     };
 
     [format ["Checkpoint %1 supply cargo filled for %2-player scale.", _checkpointIndex, _players]] call KFH_fnc_log;
+};
+
+KFH_fnc_fillStartSupportCargo = {
+    params ["_ammo", "_medical"];
+
+    private _players = [] call KFH_fnc_getRewardPlayerCount;
+    private _difficultyIndex = missionNamespace getVariable ["KFH_difficultyIndex", (missionNamespace getVariable ["KFH_difficultyParamDefault", 1])];
+    private _sidearmCoverageByDifficulty = missionNamespace getVariable ["KFH_startSidearmCacheCoverageByDifficulty", []];
+    private _sidearmCoverage = missionNamespace getVariable ["KFH_startSidearmCacheCoverageRatio", 1];
+    if (_difficultyIndex < (count _sidearmCoverageByDifficulty)) then {
+        _sidearmCoverage = _sidearmCoverageByDifficulty select _difficultyIndex;
+    };
+    private _toolKitCountsByDifficulty = missionNamespace getVariable ["KFH_startToolKitCountsByDifficulty", [1, 1, 1, 0]];
+    private _toolKitCount = if (_difficultyIndex < (count _toolKitCountsByDifficulty)) then {
+        _toolKitCountsByDifficulty select _difficultyIndex
+    } else {
+        0
+    };
+
+    if !(isNull _ammo) then {
+        private _weaponCount = ceil (_players * (_sidearmCoverage max 0));
+        if (_weaponCount > 0) then {
+            private _bundles = [missionNamespace getVariable ["KFH_startSidearmCacheBundles", []]] call KFH_fnc_filterExistingWeaponBundles;
+            if ((count _bundles) > 0) then {
+                [_ammo, selectRandom _bundles, _weaponCount] call KFH_fnc_addRewardWeaponBundle;
+            };
+        };
+        [_ammo, "SmokeShell", 3 + ceil (_players / 3)] call KFH_fnc_addOptionalMagazineCargo;
+        [_ammo, "Chemlight_green", 4 + ceil (_players / 3)] call KFH_fnc_addOptionalMagazineCargo;
+        _ammo addItemCargoGlobal ["FirstAidKit", 2 + ceil (_players / 2)];
+    };
+
+    if !(isNull _medical) then {
+        _medical addItemCargoGlobal ["FirstAidKit", 6 + _players];
+        if (_toolKitCount > 0) then {
+            _medical addItemCargoGlobal ["ToolKit", _toolKitCount];
+        };
+        _medical addMagazineCargoGlobal ["SmokeShell", 2 + ceil (_players / 4)];
+    };
+
+    [format ["Start support cargo filled: difficulty=%1 sidearmCoverage=%2 toolkit=%3.", _difficultyIndex, _sidearmCoverage, _toolKitCount]] call KFH_fnc_log;
 };
 
 KFH_fnc_spawnSupportFob = {
@@ -2961,10 +3094,16 @@ KFH_fnc_spawnSupportFob = {
     clearBackpackCargoGlobal _medical;
     _supportObjects pushBack _medical;
 
+    [_ammo, _medical] call KFH_fnc_fillStartSupportCargo;
+
     private _repair = [KFH_repairStationClass, _markerName, KFH_supportRepairOffset, 270] call KFH_fnc_spawnSupportObject;
     _repair setDamage 0;
     _repair setVariable ["KFH_supportType", "repair", true];
     _repair setVariable ["KFH_supportLabel", "Field Maintenance", true];
+    clearWeaponCargoGlobal _repair;
+    clearMagazineCargoGlobal _repair;
+    clearItemCargoGlobal _repair;
+    clearBackpackCargoGlobal _repair;
     _supportObjects pushBack _repair;
 
     if (
@@ -4905,13 +5044,24 @@ KFH_fnc_getDynamicRhsRewardCategory = {
 KFH_fnc_selectDynamicRhsMagazine = {
     params ["_weaponCfg"];
 
-    private _magazines = getArray (_weaponCfg >> "magazines");
+    private _magazines = (getArray (_weaponCfg >> "magazines")) + ([_weaponCfg] call KFH_fnc_getWeaponMagazineWellMagazines);
     private _usable = _magazines select {
         isClass (configFile >> "CfgMagazines" >> _x) &&
         {!([_x, ["grenade", "flare", "signal", "smoke"]] call KFH_fnc_stringContainsAny)}
     };
 
-    if ((count _usable) > 0) exitWith { _usable select 0 };
+    if ((count _usable) > 0) exitWith {
+        private _best = _usable select 0;
+        private _bestCount = getNumber (configFile >> "CfgMagazines" >> _best >> "count");
+        {
+            private _count = getNumber (configFile >> "CfgMagazines" >> _x >> "count");
+            if (_count > _bestCount) then {
+                _best = _x;
+                _bestCount = _count;
+            };
+        } forEach _usable;
+        _best
+    };
     ""
 };
 
@@ -4932,48 +5082,64 @@ KFH_fnc_buildDynamicRhsRewardBundles = {
     private _machineguns = 0;
     private _battleRifles = 0;
     private _maxPerCategory = missionNamespace getVariable ["KFH_dynamicRhsRewardMaxPerCategory", 8];
+    private _priorityTokens = missionNamespace getVariable ["KFH_dynamicRhsRewardPriorityTokens", []];
+    private _weaponConfigs = configProperties [configFile >> "CfgWeapons", "isClass _x", true];
 
-    {
-        private _className = configName _x;
+    private _addCandidate = {
+        params ["_cfg"];
+
+        private _className = configName _cfg;
         private _lowerClass = toLower _className;
         if (
             ((_lowerClass find "rhs_weap_") isEqualTo 0) ||
             {(_lowerClass find "rhsusf_weap_") isEqualTo 0} ||
             {(_lowerClass find "rhsgref_weap_") isEqualTo 0}
         ) then {
-            private _scope = getNumber (_x >> "scope");
-            private _displayName = getText (_x >> "displayName");
+            private _scope = getNumber (_cfg >> "scope");
+            private _displayName = getText (_cfg >> "displayName");
             private _category = [_className, _displayName] call KFH_fnc_getDynamicRhsRewardCategory;
             if (_scope >= 2 && {!(_displayName isEqualTo "")} && {(count _category) > 0}) then {
                 _category params ["_categoryName", "_minTier", "_magazineCount", "_attachments"];
-                private _canAdd = switch (_categoryName) do {
-                    case "shotgun": {
-                        if (_shotguns < _maxPerCategory) then { _shotguns = _shotguns + 1; true } else { false }
-                    };
-                    case "machinegun": {
-                        if (_machineguns < _maxPerCategory) then { _machineguns = _machineguns + 1; true } else { false }
-                    };
-                    default {
-                        if (_battleRifles < _maxPerCategory) then { _battleRifles = _battleRifles + 1; true } else { false }
-                    };
+                private _categoryCount = switch (_categoryName) do {
+                    case "shotgun": { _shotguns };
+                    case "machinegun": { _machineguns };
+                    default { _battleRifles };
                 };
+                private _canAdd = _categoryCount < _maxPerCategory;
                 if (_canAdd) then {
-                    private _baseWeapon = getText (_x >> "baseWeapon");
+                    private _baseWeapon = getText (_cfg >> "baseWeapon");
                     if (_baseWeapon isEqualTo "") then { _baseWeapon = _className; };
                     if !(_baseWeapon in _seenBaseWeapons) then {
-                        private _magazine = [_x] call KFH_fnc_selectDynamicRhsMagazine;
+                        private _magazine = [_cfg] call KFH_fnc_selectDynamicRhsMagazine;
                         if !(_magazine isEqualTo "") then {
                             _seenBaseWeapons pushBack _baseWeapon;
                             private _bundle = [_className, _magazine, _magazineCount, _attachments, "dynamicRhs", _categoryName];
                             if (_minTier <= 1) then { _tier1 pushBack _bundle; };
                             if (_minTier <= 2) then { _tier2 pushBack _bundle; };
                             _tier3 pushBack _bundle;
+                            switch (_categoryName) do {
+                                case "shotgun": { _shotguns = _shotguns + 1; };
+                                case "machinegun": { _machineguns = _machineguns + 1; };
+                                default { _battleRifles = _battleRifles + 1; };
+                            };
                         };
                     };
                 };
             };
         };
-    } forEach (configProperties [configFile >> "CfgWeapons", "isClass _x", true]);
+    };
+
+    {
+        private _className = configName _x;
+        private _displayName = getText (_x >> "displayName");
+        if ([format ["%1 %2", _className, _displayName], _priorityTokens] call KFH_fnc_stringContainsAny) then {
+            [_x] call _addCandidate;
+        };
+    } forEach _weaponConfigs;
+
+    {
+        [_x] call _addCandidate;
+    } forEach _weaponConfigs;
 
     private _result = [_tier1, _tier2, _tier3];
     missionNamespace setVariable ["KFH_dynamicRhsRewardBundlesCache", _result];
@@ -5012,6 +5178,12 @@ KFH_fnc_selectAvailableWeaponBundle = {
         _optionalBundles select { [_x] call KFH_fnc_isWeaponBundleAvailable }
     } else {
         []
+    };
+    private _dynamicOptional = _optional select { (count _x) > 4 && {(_x select 4) isEqualTo "dynamicRhs"} };
+    private _dynamicChance = missionNamespace getVariable ["KFH_dynamicRhsRewardPreferredChance", 0.75];
+
+    if ((count _dynamicOptional) > 0 && {(random 1) < _dynamicChance}) exitWith {
+        selectRandom _dynamicOptional
     };
 
     if ((missionNamespace getVariable ["KFH_cupBanVanillaWhenAvailable", true]) && {(count _optional) > 0}) exitWith {
@@ -5083,6 +5255,12 @@ KFH_fnc_addSideCacheATCargo = {
 
     private _bundles = missionNamespace getVariable ["KFH_sideCacheAtLauncherBundles", []];
     private _added = [_cache, 2, _bundles] call KFH_fnc_addLauncherBundlesCargo;
+    [
+        _cache,
+        missionNamespace getVariable ["KFH_sideCacheLargeBackpacks", []],
+        missionNamespace getVariable ["KFH_sideCacheLargeBackpackCoverageRatio", 0.25],
+        missionNamespace getVariable ["KFH_sideCacheLargeBackpackMin", 2]
+    ] call KFH_fnc_addScaledBackpackCargo;
     [_cache, "DemoCharge_Remote_Mag", 1] call KFH_fnc_addOptionalMagazineCargo;
     [_cache, "APERSTripMine_Wire_Mag", 2] call KFH_fnc_addOptionalMagazineCargo;
     [_cache] call KFH_fnc_addSideCacheBonusCargo;
@@ -5159,6 +5337,20 @@ KFH_fnc_addRewardBackpacks = {
     };
 };
 
+KFH_fnc_addScaledBackpackCargo = {
+    params ["_cache", ["_backpacks", []], ["_coverageRatio", 0.25], ["_minCount", 1]];
+
+    private _available = _backpacks select { isClass (configFile >> "CfgVehicles" >> _x) };
+    if ((count _available) isEqualTo 0) exitWith { 0 };
+
+    private _players = [] call KFH_fnc_getRewardPlayerCount;
+    private _count = ((ceil (_players * (_coverageRatio max 0))) max _minCount) max 1;
+    for "_i" from 1 to _count do {
+        _cache addBackpackCargoGlobal [selectRandom _available, 1];
+    };
+    _count
+};
+
 KFH_fnc_addRewardWeaponBundle = {
     params ["_cache", "_bundle", ["_weaponCount", 1]];
 
@@ -5181,6 +5373,38 @@ KFH_fnc_addRewardWeaponBundle = {
     } forEach ([_weaponClass, _attachments] call KFH_fnc_filterCompatibleWeaponAttachments);
 
     true
+};
+
+KFH_fnc_addRecentRewardBundleCargo = {
+    params ["_cache", ["_magMultiplier", 1], ["_includeAttachments", true]];
+
+    private _added = 0;
+    {
+        if ((count _x) >= 2) then {
+            private _weaponClass = _x select 0;
+            private _magazineClass = _x select 1;
+            private _magazineCount = if ((count _x) > 2) then { _x select 2 } else { 4 };
+            if ([_cache, _magazineClass, ceil (_magazineCount * (_magMultiplier max 1))] call KFH_fnc_addOptionalMagazineCargo) then {
+                _added = _added + 1;
+            };
+            if (_includeAttachments) then {
+                private _attachments = if ((count _x) > 3) then { _x select 3 } else { [] };
+                {
+                    [_cache, _x, 1] call KFH_fnc_addOptionalItemCargo;
+                } forEach ([_weaponClass, _attachments] call KFH_fnc_filterCompatibleWeaponAttachments);
+            };
+        };
+    } forEach (missionNamespace getVariable ["KFH_recentRewardWeaponBundles", []]);
+
+    _added
+};
+
+KFH_fnc_isPrePatrolRewardCheckpoint = {
+    params ["_checkpointIndex"];
+
+    if !(missionNamespace getVariable ["KFH_rewardPrePatrolATEnabled", true]) exitWith { false };
+    private _startCheckpoint = missionNamespace getVariable ["KFH_envTrafficMilitaryStartCheckpoint", 3];
+    _checkpointIndex isEqualTo ((_startCheckpoint - 1) max 1)
 };
 
 KFH_fnc_addRewardWeaponBundlePool = {
@@ -6183,9 +6407,9 @@ KFH_fnc_fillRewardCache = {
     switch (_tier) do {
         case 1: {
             private _vanillaBundles = [
-                ["SMG_01_F", "30Rnd_45ACP_Mag_SMG_01", 8, ["optic_Aco_smg", "acc_flashlight"]],
                 ["SMG_02_F", "30Rnd_9x21_Mag_SMG_02", 8, ["optic_ACO_grn_smg", "acc_flashlight"]],
-                ["hgun_PDW2000_F", "30Rnd_9x21_Mag", 8, ["optic_ACO_grn_smg", "acc_flashlight"]]
+                ["hgun_PDW2000_F", "30Rnd_9x21_Mag", 10, ["optic_ACO_grn_smg", "acc_flashlight"]],
+                ["arifle_TRG20_F", "30Rnd_556x45_Stanag", 8, ["optic_Aco", "acc_flashlight"]]
             ];
             private _optionalBundles = (missionNamespace getVariable ["KFH_cupRewardWeaponBundlesTier1", []]) + ([1] call KFH_fnc_getDynamicRhsRewardBundles);
 
@@ -6251,6 +6475,18 @@ KFH_fnc_fillRewardCache = {
         };
     };
 
+    if ([_checkpointIndex] call KFH_fnc_isPrePatrolRewardCheckpoint) then {
+        private _atCount = missionNamespace getVariable ["KFH_rewardPrePatrolATLauncherCount", 2];
+        private _addedAt = [_cache, _atCount, missionNamespace getVariable ["KFH_rewardPrePatrolATLauncherBundles", []]] call KFH_fnc_addLauncherBundlesCargo;
+        [
+            _cache,
+            missionNamespace getVariable ["KFH_rewardPrePatrolATBackpacks", []],
+            missionNamespace getVariable ["KFH_rewardPrePatrolATBackpackCoverageRatio", 0.25],
+            missionNamespace getVariable ["KFH_rewardPrePatrolATBackpackMin", 2]
+        ] call KFH_fnc_addScaledBackpackCargo;
+        [format ["Checkpoint %1 reward cache guaranteed pre-patrol AT: %2 launcher(s).", _checkpointIndex, _addedAt]] call KFH_fnc_log;
+    };
+
     [format ["Reward cache filled for checkpoint %1 (%2).", _checkpointIndex, _tierName]] call KFH_fnc_log;
 };
 
@@ -6268,10 +6504,11 @@ KFH_fnc_fillRushSupplyBackpack = {
 
     _container addItemCargoGlobal ["FirstAidKit", 3 + _bonus];
     _container addMagazineCargoGlobal ["16Rnd_9x21_Mag", 4 + _bonus];
-    _container addMagazineCargoGlobal ["30Rnd_45ACP_Mag_SMG_01", 2 + _bonus];
-    _container addMagazineCargoGlobal ["30Rnd_9x21_Mag_SMG_02", 2 + _bonus];
-    _container addMagazineCargoGlobal ["30Rnd_556x45_Stanag", 1 + _bonus];
-    _container addMagazineCargoGlobal ["30Rnd_65x39_caseless_mag", 1 + (floor (_bonus / 2))];
+    if (([_container, 0.5, true] call KFH_fnc_addRecentRewardBundleCargo) isEqualTo 0) then {
+        _container addMagazineCargoGlobal ["30Rnd_9x21_Mag_SMG_02", 2 + _bonus];
+        _container addMagazineCargoGlobal ["30Rnd_556x45_Stanag", 1 + _bonus];
+        _container addMagazineCargoGlobal ["30Rnd_65x39_caseless_mag", 1 + (floor (_bonus / 2))];
+    };
     [_container, "SmokeShell", 1] call KFH_fnc_addOptionalMagazineCargo;
     if ((random 1) < 0.25) then {
         [_container, "HandGrenade", 1] call KFH_fnc_addOptionalMagazineCargo;
@@ -6473,9 +6710,13 @@ KFH_fnc_fillFinalBaseSupply = {
             _crate setVariable ["KFH_supportLabel", "Recovery Equipment Locker", true];
         };
         default {
-            [_crate, "200Rnd_65x39_cased_Box", 2] call KFH_fnc_addOptionalMagazineCargo;
-            _crate addMagazineCargoGlobal ["30Rnd_65x39_caseless_green", 8];
-            _crate addMagazineCargoGlobal ["30Rnd_556x45_Stanag", 8];
+            private _vanillaBundles = [
+                ["LMG_Mk200_F", "200Rnd_65x39_cased_Box", 3, ["optic_Hamr", "acc_pointer_IR"]],
+                ["arifle_MX_SW_F", "100Rnd_65x39_caseless_mag", 4, ["optic_Hamr", "acc_pointer_IR"]]
+            ];
+            private _optionalBundles = (missionNamespace getVariable ["KFH_cupRewardWeaponBundlesTier3", []]) + ([3] call KFH_fnc_getDynamicRhsRewardBundles);
+            [_crate, _vanillaBundles, _optionalBundles, 3] call KFH_fnc_addRewardWeaponBundlePool;
+            [_crate, 1, true] call KFH_fnc_addRecentRewardBundleCargo;
             [_crate, "SmokeShell", 4] call KFH_fnc_addOptionalMagazineCargo;
             [_crate, "Chemlight_green", 6] call KFH_fnc_addOptionalMagazineCargo;
             _crate setVariable ["KFH_supportLabel", "Emergency Ammo Reserve", true];
@@ -6712,19 +6953,40 @@ KFH_fnc_promoteObjectiveCarrier = {
     removeAllAssignedItems _elite;
     removeBackpack _elite;
 
-    switch ([_checkpointIndex] call KFH_fnc_getCheckpointRewardTier) do {
+    private _tier = [_checkpointIndex] call KFH_fnc_getCheckpointRewardTier;
+    switch (_tier) do {
+        case 1: { _elite addBackpack "B_AssaultPack_ocamo"; };
+        case 2: { _elite addBackpack "B_Kitbag_cbr"; };
+        default { _elite addBackpack "B_Carryall_ocamo"; };
+    };
+    private _vanillaBundles = switch (_tier) do {
         case 1: {
-            _elite addBackpack "B_AssaultPack_ocamo";
-            [_elite, "SMG_01_F", "30Rnd_45ACP_Mag_SMG_01", ["optic_Aco_smg", "acc_flashlight"], 4] call KFH_fnc_givePrimaryWeaponLoadout;
+            [
+                ["SMG_02_F", "30Rnd_9x21_Mag_SMG_02", 4, ["optic_ACO_grn_smg", "acc_flashlight"]],
+                ["hgun_PDW2000_F", "30Rnd_9x21_Mag", 5, ["optic_ACO_grn_smg", "acc_flashlight"]]
+            ]
         };
         case 2: {
-            _elite addBackpack "B_Kitbag_cbr";
-            [_elite, "arifle_Katiba_C_F", "30Rnd_65x39_caseless_green", ["optic_ACO_grn", "acc_pointer_IR"], 5] call KFH_fnc_givePrimaryWeaponLoadout;
+            [
+                ["arifle_TRG21_F", "30Rnd_556x45_Stanag", 5, ["optic_Aco", "acc_flashlight"]],
+                ["arifle_Katiba_C_F", "30Rnd_65x39_caseless_green", 5, ["optic_ACO_grn", "acc_pointer_IR"]]
+            ]
         };
         default {
-            _elite addBackpack "B_Carryall_ocamo";
-            [_elite, "LMG_Zafir_F", "150Rnd_762x54_Box", ["optic_Hamr", "acc_pointer_IR"], 2] call KFH_fnc_givePrimaryWeaponLoadout;
+            [
+                ["LMG_Mk200_F", "200Rnd_65x39_cased_Box", 2, ["optic_Hamr", "acc_pointer_IR"]],
+                ["arifle_MX_SW_F", "100Rnd_65x39_caseless_mag", 3, ["optic_Hamr", "acc_pointer_IR"]]
+            ]
         };
+    };
+    private _optionalBundles = (missionNamespace getVariable [format ["KFH_cupRewardWeaponBundlesTier%1", _tier], []]) + ([_tier] call KFH_fnc_getDynamicRhsRewardBundles);
+    private _entry = [_vanillaBundles, _optionalBundles, missionNamespace getVariable ["KFH_cupRewardPreferredChance", 1]] call KFH_fnc_selectAvailableWeaponBundle;
+    if ((count _entry) >= 2) then {
+        private _weapon = _entry select 0;
+        private _mag = _entry select 1;
+        private _magCount = if ((count _entry) > 2) then { (_entry select 2) min 6 } else { 4 };
+        private _attachments = if ((count _entry) > 3) then { _entry select 3 } else { [] };
+        [_elite, _weapon, _mag, _attachments, _magCount] call KFH_fnc_givePrimaryWeaponLoadout;
     };
 
     _elite setSkill 0.6;
@@ -6895,25 +7157,31 @@ KFH_fnc_configureLeaperProxyInfected = {
     [_unit, false] call KFH_fnc_configureHeavyInfected;
     _unit setVariable ["KFH_enemyRole", "leaper", true];
     _unit setVariable ["KFH_leaperProxy", true, true];
+    _unit enableFatigue false;
     _unit setAnimSpeedCoef (missionNamespace getVariable ["KFH_leaperProxyAnimSpeed", 1.12]);
+    _unit setVariable ["KFH_nextLeaperPounceAt", time + 0.8 + random 1.2];
     _unit setSkill 0.7;
     _unit allowFleeing 0;
     {
         _unit disableAI _x;
-    } forEach ["AUTOCOMBAT", "COVER", "SUPPRESSION", "FSM"];
+    } forEach ["AUTOCOMBAT", "COVER", "SUPPRESSION"];
     {
         _unit enableAI _x;
-    } forEach ["MOVE", "PATH", "TARGET", "AUTOTARGET"];
-    _unit setBehaviourStrong "AWARE";
+    } forEach ["MOVE", "PATH", "TARGET", "AUTOTARGET", "FSM"];
+    _unit setBehaviourStrong "COMBAT";
     _unit setCombatMode "RED";
     _unit setSpeedMode "FULL";
-    _unit setUnitPos "UP";
+    if (missionNamespace getVariable ["KFH_leaperProxyCrawlEnabled", true]) then {
+        _unit setUnitPos "DOWN";
+    } else {
+        _unit setUnitPos "UP";
+    };
     _unit forceWalk false;
     (group _unit) allowFleeing 0;
-    (group _unit) setBehaviour "AWARE";
+    (group _unit) setBehaviour "COMBAT";
     (group _unit) setCombatMode "RED";
     (group _unit) setSpeedMode "FULL";
-    [format ["Leaper proxy configured with KFH heavy melee AI at %1.", mapGridPosition _unit]] call KFH_fnc_log;
+    [format ["Leaper proxy configured with KFH crawling melee AI at %1.", mapGridPosition _unit]] call KFH_fnc_log;
 };
 
 KFH_fnc_configureJuggernautInfected = {
@@ -7064,6 +7332,21 @@ KFH_fnc_leaveBehindJuggernaut = {
     [format ["Juggernaut left behind without relocation: %1 at %2 (%3).", typeOf _unit, mapGridPosition _unit, _reason]] call KFH_fnc_log;
 };
 
+KFH_fnc_addRushDebt = {
+    params [["_count", 0], ["_reason", "left behind"]];
+
+    if !(missionNamespace getVariable ["KFH_rushDebtEnabled", true]) exitWith { 0 };
+    _count = floor (_count max 0);
+    if (_count <= 0) exitWith { missionNamespace getVariable ["KFH_rushDebtCount", 0] };
+
+    private _debt = missionNamespace getVariable ["KFH_rushDebtCount", 0];
+    private _maxDebt = missionNamespace getVariable ["KFH_rushDebtMax", 24];
+    private _newDebt = (_debt + _count) min _maxDebt;
+    missionNamespace setVariable ["KFH_rushDebtCount", _newDebt, true];
+    [format ["Rush debt accrued: +%1 (%2), total=%3/%4.", _count, _reason, _newDebt, _maxDebt]] call KFH_fnc_log;
+    _newDebt
+};
+
 KFH_fnc_spawnSpecialInfected = {
     params [
         "_centerPos",
@@ -7189,23 +7472,41 @@ KFH_fnc_spawnCheckpointSpecialInfected = {
 
     private _roleClass = [] call KFH_fnc_selectCheckpointSpecialRole;
     _roleClass params ["_role", "_className"];
+    private _centerPos = getMarkerPos _checkpointMarker;
+    private _moveTarget = +_centerPos;
+    if (_role isEqualTo "leaper" && {missionNamespace getVariable ["KFH_leaperProxyHumanAnchorEnabled", true]}) then {
+        private _anchor = [_centerPos] call KFH_fnc_getNearestHumanReferenceUnit;
+        if (!isNull _anchor && {(_anchor distance2D _centerPos) > (missionNamespace getVariable ["KFH_leaperProxyHumanAnchorCheckpointDistance", 260])}) then {
+            _centerPos = getPosATL (vehicle _anchor);
+            _moveTarget = +_centerPos;
+            [format ["Leaper checkpoint special anchored near human at %1 instead of distant CP%2.", mapGridPosition _centerPos, _checkpointIndex]] call KFH_fnc_log;
+        };
+    };
     private _minDistance = if (_role isEqualTo "screamer") then {
         missionNamespace getVariable ["KFH_screamerSpawnDistanceMin", 150]
     } else {
-        missionNamespace getVariable ["KFH_checkpointSpecialMinDistance", 42]
+        if (_role isEqualTo "leaper" && {!(_centerPos isEqualTo (getMarkerPos _checkpointMarker))}) then {
+            missionNamespace getVariable ["KFH_leaperProxyHumanAnchorMinDistance", 65]
+        } else {
+            missionNamespace getVariable ["KFH_checkpointSpecialMinDistance", 42]
+        }
     };
     private _maxDistance = if (_role isEqualTo "screamer") then {
         missionNamespace getVariable ["KFH_screamerSpawnDistanceMax", 260]
     } else {
-        missionNamespace getVariable ["KFH_checkpointSpecialMaxDistance", 110]
+        if (_role isEqualTo "leaper" && {!(_centerPos isEqualTo (getMarkerPos _checkpointMarker))}) then {
+            missionNamespace getVariable ["KFH_leaperProxyHumanAnchorMaxDistance", 135]
+        } else {
+            missionNamespace getVariable ["KFH_checkpointSpecialMaxDistance", 110]
+        }
     };
     [
-        getMarkerPos _checkpointMarker,
+        _centerPos,
         _className,
         _role,
         _minDistance,
         _maxDistance,
-        getMarkerPos _checkpointMarker,
+        _moveTarget,
         false,
         true,
         true
@@ -7581,7 +7882,7 @@ KFH_fnc_updateMeleeEnemy = {
 
     if (time >= (_unit getVariable ["KFH_nextMoveUpdateAt", 0])) then {
         [_unit, _target, _distance] call KFH_fnc_updateMeleeDestination;
-        _unit setVariable ["KFH_nextMoveUpdateAt", time + (if (_role isEqualTo "leaper") then { 0.2 } else { KFH_meleeRetargetSeconds })];
+        _unit setVariable ["KFH_nextMoveUpdateAt", time + (if (_role isEqualTo "leaper") then { missionNamespace getVariable ["KFH_leaperProxyRetargetSeconds", 0.12] } else { KFH_meleeRetargetSeconds })];
     };
 
     if (time >= ((_unit getVariable ["KFH_lastStuckCheckAt", 0]) + KFH_meleeStuckCheckSeconds)) then {
@@ -7597,7 +7898,11 @@ KFH_fnc_updateMeleeEnemy = {
         _unit setVariable ["KFH_lastStuckCheckPos", getPosATL _unit];
     };
 
-    _unit setUnitPos "UP";
+    if (_role isEqualTo "leaper" && {missionNamespace getVariable ["KFH_leaperProxyCrawlEnabled", true]}) then {
+        _unit setUnitPos "DOWN";
+    } else {
+        _unit setUnitPos "UP";
+    };
     _unit stop false;
     _unit allowFleeing 0;
     _unit setBehaviourStrong "COMBAT";
@@ -7608,15 +7913,31 @@ KFH_fnc_updateMeleeEnemy = {
 
     if (_role isEqualTo "leaper") then {
         private _targetPos = getPosATL _target;
-        _unit disableAI "FSM";
-        _unit setBehaviourStrong "AWARE";
+        _unit enableAI "FSM";
+        _unit setBehaviourStrong "COMBAT";
         _unit setCombatMode "RED";
-        (group _unit) setBehaviour "AWARE";
+        (group _unit) setBehaviour "COMBAT";
         (group _unit) setCombatMode "RED";
         _unit commandMove _targetPos;
         _unit doMove _targetPos;
         (group _unit) move _targetPos;
         _unit setDestination [_targetPos, "LEADER DIRECT", true];
+
+        private _pounceMin = missionNamespace getVariable ["KFH_leaperProxyPounceMinDistance", 4.5];
+        private _pounceMax = missionNamespace getVariable ["KFH_leaperProxyPounceMaxDistance", 16];
+        if (
+            _distance >= _pounceMin &&
+            {_distance <= _pounceMax} &&
+            {time >= (_unit getVariable ["KFH_nextLeaperPounceAt", 0])}
+        ) then {
+            _unit setVariable ["KFH_nextLeaperPounceAt", time + (missionNamespace getVariable ["KFH_leaperProxyPounceCooldown", 2.8]) + random 0.8];
+            _unit setDir _targetDir;
+            _unit setVelocityModelSpace [
+                0,
+                missionNamespace getVariable ["KFH_leaperProxyPounceForwardVelocity", 7.5],
+                missionNamespace getVariable ["KFH_leaperProxyPounceUpVelocity", 1.25]
+            ];
+        };
     };
 
     if (_distance <= KFH_meleeFaceDistance) then {
@@ -7624,9 +7945,15 @@ KFH_fnc_updateMeleeEnemy = {
     };
 
     if (_distance <= KFH_meleeWalkDistance) then {
-        _unit forceWalk true;
-        _unit setSpeedMode "LIMITED";
-        _unit setAnimSpeedCoef KFH_meleeWalkAnimSpeed;
+        if (_role isEqualTo "leaper") then {
+            _unit forceWalk false;
+            _unit setSpeedMode "FULL";
+            _unit setAnimSpeedCoef _runAnimSpeed;
+        } else {
+            _unit forceWalk true;
+            _unit setSpeedMode "LIMITED";
+            _unit setAnimSpeedCoef KFH_meleeWalkAnimSpeed;
+        };
     } else {
         _unit forceWalk false;
         _unit setSpeedMode "FULL";
@@ -7927,11 +8254,7 @@ KFH_fnc_unregisterStaleEnemy = {
         ["KFH_pressure", (_pressure + _pressurePenalty) min KFH_pressureMax] call KFH_fnc_setState;
     };
 
-    if (missionNamespace getVariable ["KFH_rushDebtEnabled", true]) then {
-        private _debt = missionNamespace getVariable ["KFH_rushDebtCount", 0];
-        private _maxDebt = missionNamespace getVariable ["KFH_rushDebtMax", 24];
-        missionNamespace setVariable ["KFH_rushDebtCount", (_debt + 1) min _maxDebt, true];
-    };
+    [1, _reason] call KFH_fnc_addRushDebt;
 
     [format ["Objective hostile removed from count: %1 (%2).", typeOf _unit, _reason]] call KFH_fnc_log;
 
@@ -7954,6 +8277,7 @@ KFH_fnc_recycleOffscreenObjectiveEnemies = {
     private _objectiveEnemies = missionNamespace getVariable ["KFH_currentObjectiveEnemies", []];
     private _activeEnemies = missionNamespace getVariable ["KFH_activeEnemies", []];
     private _objectiveDistance = missionNamespace getVariable ["KFH_waveRecycleObjectiveDistance", 240];
+    private _forceObjectiveDistance = missionNamespace getVariable ["KFH_waveRecycleForceObjectiveDistance", _objectiveDistance + 180];
     private _humanDistance = missionNamespace getVariable ["KFH_waveRecycleHumanDistance", 260];
     private _kept = [];
     private _removed = 0;
@@ -7961,8 +8285,10 @@ KFH_fnc_recycleOffscreenObjectiveEnemies = {
     {
         if (alive _x) then {
             private _farFromObjective = (_x distance2D _markerPos) > _objectiveDistance;
+            private _veryFarFromObjective = (_x distance2D _markerPos) > _forceObjectiveDistance;
             private _offscreen = ([getPosATL _x] call KFH_fnc_getNearestHumanDistance) > _humanDistance;
-            if (_farFromObjective && {_offscreen} && {!([_x] call KFH_fnc_isUnitVisibleToHumans)}) then {
+            private _canRecycle = _farFromObjective && {_offscreen} && {_veryFarFromObjective || {!([_x] call KFH_fnc_isUnitVisibleToHumans)}};
+            if (_canRecycle) then {
                 if ([_x] call KFH_fnc_isJuggernautEnemy) then {
                     [_x, "offscreen recycle skipped"] call KFH_fnc_leaveBehindJuggernaut;
                     _activeEnemies = _activeEnemies - [_x];
@@ -8036,6 +8362,12 @@ KFH_fnc_relocateStaleEnemyToObjective = {
     };
     if ((count _spawnPos) < 2) exitWith { false };
 
+    private _maxObjectiveDistance = missionNamespace getVariable [
+        "KFH_staleEnemyRelocateMaxObjectiveDistance",
+        (missionNamespace getVariable ["KFH_staleEnemyRelocateMaxDistance", 190]) + (missionNamespace getVariable ["KFH_staleEnemyRelocateCoverRadius", 95])
+    ];
+    if ((_spawnPos distance2D _markerPos) > _maxObjectiveDistance) exitWith { false };
+
     private _groupRef = group _unit;
     {
         deleteWaypoint _x;
@@ -8062,7 +8394,7 @@ KFH_fnc_relocateStaleEnemyToObjective = {
     _wp setWaypointBehaviour "COMBAT";
     _wp setWaypointCompletionRadius KFH_captureRadius;
 
-    [format ["Objective hostile relocated ahead: %1 -> %2.", typeOf _unit, mapGridPosition _spawnPos]] call KFH_fnc_log;
+    [format ["Objective hostile relocated toward checkpoint: %1 -> %2.", typeOf _unit, mapGridPosition _spawnPos]] call KFH_fnc_log;
     true
 };
 
@@ -8162,7 +8494,8 @@ KFH_fnc_pruneStaleObjectiveEnemies = {
     private _markerPos = if (_markerName in allMapMarkers) then { getMarkerPos _markerName } else { [0, 0, 0] };
     private _minDistance = missionNamespace getVariable ["KFH_staleEnemyMinDistance", 520];
     private _forgetSeconds = missionNamespace getVariable ["KFH_staleEnemyForgetSeconds", 40];
-    private _cpGraceDistance = KFH_captureRadius + 220;
+    private _cpGraceDistance = missionNamespace getVariable ["KFH_staleEnemyObjectiveGraceDistance", KFH_captureRadius + 220];
+    private _recycleDistance = missionNamespace getVariable ["KFH_waveRecycleObjectiveDistance", 240];
     private _kept = [];
 
     {
@@ -8186,13 +8519,27 @@ KFH_fnc_pruneStaleObjectiveEnemies = {
                 } else {
                     if ((time - _staleSince) >= _forgetSeconds) then {
                         if ([_x] call KFH_fnc_relocateStaleEnemyToObjective) then {
+                            _x setVariable ["KFH_recyclePendingLogged", false];
                             _kept pushBack _x;
                         } else {
                             if ([_x] call KFH_fnc_isUnitVisibleToHumans) then {
                                 _x setVariable ["KFH_staleSince", time];
                                 _kept pushBack _x;
                             } else {
-                                [_x, "left behind"] call KFH_fnc_unregisterStaleEnemy;
+                                if (
+                                    (missionNamespace getVariable ["KFH_waveRecycleOffscreenEnabled", true]) &&
+                                    {_markerName in allMapMarkers} &&
+                                    {(_x distance2D _markerPos) > _recycleDistance}
+                                ) then {
+                                    _x setVariable ["KFH_staleSince", time];
+                                    if !(_x getVariable ["KFH_recyclePendingLogged", false]) then {
+                                        _x setVariable ["KFH_recyclePendingLogged", true];
+                                        [format ["Objective hostile queued for next-wave recycle: %1 at %2.", typeOf _x, mapGridPosition (getPosATL _x)]] call KFH_fnc_log;
+                                    };
+                                    _kept pushBack _x;
+                                } else {
+                                    [_x, "left behind"] call KFH_fnc_unregisterStaleEnemy;
+                                };
                             };
                         };
                     } else {
@@ -8202,6 +8549,7 @@ KFH_fnc_pruneStaleObjectiveEnemies = {
                 };
             } else {
                 _x setVariable ["KFH_staleSince", -1];
+                _x setVariable ["KFH_recyclePendingLogged", false];
                 _kept pushBack _x;
             };
         };
@@ -8274,7 +8622,12 @@ KFH_fnc_spawnGroupWave = {
 
     private _enemyClasses = missionNamespace getVariable ["KFH_enemyClasses", KFH_enemyClasses];
     private _spawnedUnits = [];
+    private _requestedUnitCount = _unitCount max 0;
     _unitCount = [_unitCount] call KFH_fnc_limitSpawnCountByActiveBudget;
+    private _deferredUnitCount = (_requestedUnitCount - _unitCount) max 0;
+    if (_deferredUnitCount > 0) then {
+        [_deferredUnitCount, "spawn cap deferred from wave request"] call KFH_fnc_addRushDebt;
+    };
 
     if ((count _enemyClasses) isEqualTo 0) exitWith { [] };
     if (_unitCount <= 0) exitWith { [] };
@@ -8390,12 +8743,20 @@ KFH_fnc_spawnCheckpointWave = {
         _multiplier
     };
     private _unitCount = [ceil (_baseCount * _effectiveMultiplier)] call KFH_fnc_scaledEnemyCount;
-    private _rushDebt = if (_isRushWave) then { missionNamespace getVariable ["KFH_rushDebtCount", 0] } else { 0 };
+    private _rushDebt = missionNamespace getVariable ["KFH_rushDebtCount", 0];
     if (_isRushWave && {_rushDebt > 0}) then {
         missionNamespace setVariable ["KFH_rushDebtCount", 0, true];
         [format ["Rush debt paid: %1 left-behind hostiles added to wave %2.", _rushDebt, _newWaveNumber]] call KFH_fnc_log;
     };
-    _unitCount = _unitCount + _recycledCount + _rushDebt;
+    private _rushDebtInterest = 0;
+    if (!_isRushWave && {_rushDebt > 0} && {missionNamespace getVariable ["KFH_rushDebtInterestEnabled", true]}) then {
+        private _interestRatio = missionNamespace getVariable ["KFH_rushDebtInterestRatio", 0.25];
+        private _interestMin = missionNamespace getVariable ["KFH_rushDebtInterestMin", 1];
+        private _interestMax = missionNamespace getVariable ["KFH_rushDebtInterestMax", 4];
+        _rushDebtInterest = ((ceil (_rushDebt * _interestRatio)) max _interestMin) min _interestMax;
+        [format ["Rush debt interest charged: %1 extra hostiles on wave %2, principal remains %3.", _rushDebtInterest, _newWaveNumber, _rushDebt]] call KFH_fnc_log;
+    };
+    _unitCount = _unitCount + _recycledCount + (if (_isRushWave) then { _rushDebt } else { _rushDebtInterest });
     private _spawnMarkers = [format ["kfh_spawn_%1", _checkpointIndex]] call KFH_fnc_getSpawnMarkers;
     private _gunnerChance = if (_isRushWave) then { KFH_rushGunnerChance } else { KFH_standardGunnerChance };
     private _supplyCarrierChance = if (_isRushWave) then { KFH_rushSupplyCarrierChance } else { 0 };
@@ -8477,6 +8838,7 @@ KFH_fnc_spawnCheckpointWave = {
         ["A3\Sounds_F\sfx\alarm_independent.wss", 2.6, 0.86] remoteExecCall ["KFH_fnc_playUiCue", 0];
     } else {
         [format ["Wave %1 deployed at checkpoint %2 (%3 hostiles).", _newWaveNumber, _checkpointIndex, count _spawnedUnits]] call KFH_fnc_log;
+        [] remoteExecCall ["KFH_fnc_playWaveStartWarning", 0];
     };
     [format ["Wave %1 が checkpoint %2 に到達、敵 %3 体デス。", _newWaveNumber, _checkpointIndex, count _spawnedUnits], "WAVE"] call KFH_fnc_appendRunEvent;
     [format ["Spawned hostiles near checkpoint %1 at %2.", _checkpointIndex, mapGridPosition (getMarkerPos _checkpointMarker)]] call KFH_fnc_log;
@@ -8489,11 +8851,28 @@ KFH_fnc_spawnExtractWave = {
 
     if (_extractMarker isEqualTo "") exitWith { [] };
 
+    private _extractPos = getMarkerPos _extractMarker;
+    private _checkpointMarkers = missionNamespace getVariable ["KFH_checkpointMarkers", []];
+    private _spawnCenter = _extractPos;
     private _spawnMarkers = ["kfh_spawn_extract"] call KFH_fnc_getSpawnMarkers;
+    if (
+        missionNamespace getVariable ["KFH_extractSpawnFromFinalCheckpoint", true] &&
+        {(count _checkpointMarkers) > 0}
+    ) then {
+        _spawnCenter = getMarkerPos (_checkpointMarkers select ((count _checkpointMarkers) - 1));
+        _spawnMarkers = [];
+    };
+
     private _extractBaseCount = missionNamespace getVariable ["KFH_extractWaveBaseCount", KFH_extractBaseWaveCount];
     private _unitCount = [ceil (_extractBaseCount * ([] call KFH_fnc_getPressureSpawnMultiplier))] call KFH_fnc_scaledEnemyCount;
+    private _rushDebt = missionNamespace getVariable ["KFH_rushDebtCount", 0];
+    if (_rushDebt > 0) then {
+        missionNamespace setVariable ["KFH_rushDebtCount", 0, true];
+        [format ["Rush debt paid: %1 left-behind hostiles added to extraction finale wave.", _rushDebt]] call KFH_fnc_log;
+    };
+    _unitCount = _unitCount + _rushDebt;
     private _spawnedUnits = [
-        getMarkerPos _extractMarker,
+        _spawnCenter,
         _spawnMarkers,
         _unitCount,
         KFH_extractGunnerChance,
@@ -8505,13 +8884,29 @@ KFH_fnc_spawnExtractWave = {
 
     _activeEnemies append _spawnedUnits;
     missionNamespace setVariable ["KFH_activeEnemies", _activeEnemies];
+    private _objectiveEnemies = missionNamespace getVariable ["KFH_currentObjectiveEnemies", []];
+    _objectiveEnemies append _spawnedUnits;
+    missionNamespace setVariable ["KFH_currentObjectiveEnemies", _objectiveEnemies];
+    missionNamespace setVariable ["KFH_currentObjectiveMarker", _extractMarker, true];
+    {
+        if (alive _x) then {
+            (group _x) move _extractPos;
+            _x doMove _extractPos;
+            _x setVariable ["KFH_nextCommandMoveAt", 0];
+            _x setVariable ["KFH_nextForcedDestinationAt", 0];
+        };
+    } forEach _spawnedUnits;
+
     ["KFH_currentWave", _waveNumber + 1] call KFH_fnc_setState;
     missionNamespace setVariable ["KFH_currentWaveStartedAt", time, true];
-    missionNamespace setVariable ["KFH_currentWaveHostileCount", count _spawnedUnits, true];
+    missionNamespace setVariable ["KFH_currentWaveHostileCount", count _objectiveEnemies, true];
     missionNamespace setVariable ["KFH_objectiveClearCooldownAppliedWave", -1, true];
+    ["KFH_objectiveHostiles", count _objectiveEnemies] call KFH_fnc_setState;
     ["KFH_totalHostiles", count _activeEnemies] call KFH_fnc_setState;
-    ["Retreat wave deployed near extraction."] call KFH_fnc_notifyAll;
-    [format ["帰還 wave %1 が extraction 付近に出現、敵 %2 体デス。", _waveNumber + 1, count _spawnedUnits], "WAVE"] call KFH_fnc_appendRunEvent;
+    [format ["Retreat wave redeployed from final checkpoint toward extraction (%1 hostiles).", count _spawnedUnits]] call KFH_fnc_notifyAll;
+    [] remoteExecCall ["KFH_fnc_playFinaleRushWarning", 0];
+    [format ["帰還 wave %1 が final checkpoint 方向から LZ へ再投入、敵 %2 体デス。", _waveNumber + 1, count _spawnedUnits], "WAVE"] call KFH_fnc_appendRunEvent;
+    [format ["Extraction retreat wave spawned at %1 and ordered to LZ %2 (%3 hostiles).", mapGridPosition _spawnCenter, mapGridPosition _extractPos, count _spawnedUnits]] call KFH_fnc_log;
 
     _spawnedUnits
 };
@@ -8538,6 +8933,25 @@ KFH_fnc_onCheckpointSecured = {
         _checkpointIndex,
         [_checkpointIndex] call KFH_fnc_getCheckpointEventName
     ], "CHECKPOINT"] call KFH_fnc_appendRunEvent;
+
+    private _skippedObjectiveEnemies = (missionNamespace getVariable ["KFH_currentObjectiveEnemies", []]) select {
+        alive _x && {!([_x] call KFH_fnc_isJuggernautEnemy)}
+    };
+    [count _skippedObjectiveEnemies, format ["checkpoint %1 secured with hostiles bypassed", _checkpointIndex]] call KFH_fnc_addRushDebt;
+    if ((count _skippedObjectiveEnemies) > 0) then {
+        private _activeEnemies = missionNamespace getVariable ["KFH_activeEnemies", []];
+        _activeEnemies = _activeEnemies - _skippedObjectiveEnemies;
+        missionNamespace setVariable ["KFH_activeEnemies", _activeEnemies];
+        ["KFH_totalHostiles", count _activeEnemies] call KFH_fnc_setState;
+        {
+            private _groupRef = group _x;
+            deleteVehicle _x;
+            if (!isNull _groupRef && {({alive _x} count units _groupRef) isEqualTo 0}) then {
+                deleteGroup _groupRef;
+            };
+        } forEach _skippedObjectiveEnemies;
+    };
+
     if (_checkpointIndex isEqualTo 1) then {
         ["firstCheckpoint", _checkpointIndex] call KFH_fnc_playStoryBeatOnce;
     };
@@ -8762,6 +9176,7 @@ KFH_fnc_applyDifficultyPreset = {
     };
 
     missionNamespace setVariable ["KFH_difficulty", _name, true];
+    missionNamespace setVariable ["KFH_difficultyIndex", _index, true];
     [format ["Difficulty preset applied: %1 (%2).", _name, _index]] call KFH_fnc_log;
 };
 
@@ -9513,6 +9928,8 @@ KFH_fnc_clientTopHudLoop = {
             private _wave = missionNamespace getVariable ["KFH_currentWave", 0];
             private _objectiveHostiles = missionNamespace getVariable ["KFH_objectiveHostiles", 0];
             private _totalHostiles = missionNamespace getVariable ["KFH_totalHostiles", 0];
+            private _pendingHostiles = missionNamespace getVariable ["KFH_rushDebtCount", 0];
+            private _displayTotalHostiles = _totalHostiles + _pendingHostiles;
             private _rushActive = missionNamespace getVariable ["KFH_rushActive", false];
             private _wavesUntilRush = [] call KFH_fnc_getWavesUntilRush;
             private _captureProgress = missionNamespace getVariable ["KFH_captureProgress", 0];
@@ -9547,7 +9964,7 @@ KFH_fnc_clientTopHudLoop = {
                 _wave,
                 _rushLabel,
                 _objectiveHostiles,
-                _totalHostiles,
+                _displayTotalHostiles,
                 _pressure,
                 KFH_pressureMax,
                 _captureLabel,
