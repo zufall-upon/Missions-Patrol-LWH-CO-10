@@ -1,0 +1,151 @@
+author = "MobmateTeam";
+onLoadName = "KFH_Patrol_LWH_co10";
+onLoadMission = "10-player PvEvE route survival focused on pressure, checkpoints, and extraction.";
+loadScreen = "";
+overviewText = "Outbreak patrol survival: take the long way home through PvEvE checkpoints.";
+disabledAI = 1;
+staminaCoef = 0.2;
+independentFriendly = 0;
+
+respawn = 3;
+respawnDelay = 8;
+respawnOnStart = 0;
+respawnDialog = 0;
+respawnTemplates[] = {};
+ReviveMode = 0;
+ReviveUnconsciousStateMode = 0;
+ReviveRequiredTrait = 0;
+ReviveRequiredItems = 0;
+ReviveRequiredItemsFakConsumed = 0;
+ReviveDelay = 6;
+ReviveMedicSpeedMultiplier = 1.5;
+ReviveForceRespawnDelay = 9999;
+ReviveBleedOutDelay = 240;
+
+debriefing = 1;
+
+class Header
+{
+    gameType = Coop;
+    minPlayers = 1;
+    maxPlayers = 10;
+};
+
+class Params
+{
+    class KFH_Difficulty
+    {
+        title = "KFH_Patrol_LWH_co10 Difficulty";
+        values[] = {0,1,2,3};
+        texts[] = {"Easy","Normal","Hard","Very Hard"};
+        default = 1;
+    };
+    class KFH_ExtractionTestMode
+    {
+        title = "KFH_Patrol_LWH_co10 Extraction Test";
+        values[] = {0,1,2};
+        texts[] = {"Disabled","Heli Extraction","Finale Rush"};
+        default = 0;
+    };
+    class KFH_RouteScale
+    {
+        title = "KFH_Patrol_LWH_co10 Route Scale";
+        values[] = {100,50,33};
+        texts[] = {"Full","Half","One Third Test"};
+        default = 100;
+    };
+    class KFH_CheckpointCount
+    {
+        title = "KFH_Patrol_LWH_co10 Checkpoints";
+        values[] = {3,4,5,6,7,8,9,10};
+        texts[] = {"3","4","5","6","7","8","9","10"};
+        default = 6;
+    };
+    class KFH_AnnouncementLanguage
+    {
+        title = "KFH_Patrol_LWH_co10 Announcement Language";
+        values[] = {0,1,2};
+        texts[] = {"Japanese","English","Chinese (Simplified)"};
+        default = 0;
+    };
+    class KFH_EnemyAccuracy
+    {
+        title = "KFH_Patrol_LWH_co10 Enemy Fire Accuracy";
+        values[] = {0,1,2,3,4};
+        texts[] = {"Very Low","Low","Normal","High","Very High"};
+        default = 1;
+    };
+    class KFH_ThreatScale
+    {
+        title = "KFH_Patrol_LWH_co10 Enemy Density";
+        values[] = {75,100,125,150,200};
+        texts[] = {"Light","Normal","Harder","Dense","Very Dense"};
+        default = 100;
+    };
+    class KFH_ScalingTestAllies
+    {
+        title = "KFH_Patrol_LWH_co10 AI Scaling Test Allies";
+        values[] = {0,3,7};
+        texts[] = {"Disabled","3 AI allies / 4-player scale","7 AI allies / 8-player scale"};
+        default = 0;
+    };
+};
+
+class CfgSounds
+{
+    sounds[] =
+    {
+        KFH_HoloGroanAlarm,
+        KFH_HoloGroanPulse
+    };
+
+    class KFH_HoloGroanAlarm
+    {
+        name = "KFH_HoloGroanAlarm";
+        sound[] = {"@A3\Sounds_F\sfx\alarm_independent.wss", 2.8, 0.72, 55};
+        titles[] = {};
+    };
+
+    class KFH_HoloGroanPulse
+    {
+        name = "KFH_HoloGroanPulse";
+        sound[] = {"@A3\Sounds_F\sfx\blip1.wss", 3.5, 0.58, 38};
+        titles[] = {};
+    };
+};
+
+class CfgDebriefing
+{
+    class end1
+    {
+        title = "Extraction Successful";
+        subtitle = "The team returned alive.";
+        description = "You pushed through the hive pressure, secured the route, and made it back out.";
+        picture = "b_inf";
+        pictureColor[] = {0.2,0.6,1,1};
+    };
+
+    class loser
+    {
+        title = "Operation Lost";
+        subtitle = "Hive pressure overwhelmed the team.";
+        description = "The push stalled before the route could be stabilized for a full return.";
+        picture = "KIA";
+        pictureColor[] = {0.8,0.15,0.15,1};
+    };
+};
+
+class CfgDebriefingSections
+{
+    class KFHRunStats
+    {
+        title = "結果";
+        variable = "KFH_debriefStats";
+    };
+
+    class KFHRunTimeline
+    {
+        title = "Run Log";
+        variable = "KFH_debriefTimeline";
+    };
+};
