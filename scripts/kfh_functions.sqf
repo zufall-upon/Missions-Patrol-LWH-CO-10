@@ -9024,27 +9024,31 @@ KFH_fnc_completeMission = {
 };
 
 KFH_fnc_waitForInitialCombatReady = {
-    private _deadline = time + KFH_initialWaveReadyTimeout;
+    private _deadline = diag_tickTime + KFH_initialWaveReadyTimeout;
     private _ready = false;
     private _hasHumans = false;
+    private _humanCount = 0;
+    private _readyCount = 0;
 
     waitUntil {
         sleep 0.5;
         private _humans = [] call KFH_fnc_getHumanPlayers;
-        _hasHumans = (count _humans) > 0;
-        _ready = (count (_humans select {
+        _humanCount = count _humans;
+        _hasHumans = _humanCount > 0;
+        _readyCount = count (_humans select {
             alive _x && {_x getVariable ["KFH_clientReadyForInitialWave", false]}
-        })) > 0;
+        });
+        _ready = _readyCount > 0;
 
-        _ready || {time >= _deadline && {_hasHumans}}
+        _ready || {diag_tickTime >= _deadline && {_hasHumans}}
     };
 
     sleep KFH_initialWaveReadyBuffer;
 
     if (_ready) then {
-        ["Initial wave released after player starter loadout readiness."] call KFH_fnc_log;
+        [format ["Initial wave released after player starter loadout readiness (%1/%2 ready).", _readyCount, _humanCount]] call KFH_fnc_log;
     } else {
-        ["Initial wave readiness timed out; releasing wave after safety buffer."] call KFH_fnc_log;
+        [format ["Initial wave readiness timed out in real time; releasing wave after safety buffer (%1/%2 ready).", _readyCount, _humanCount]] call KFH_fnc_log;
     };
 
     missionNamespace setVariable ["KFH_initialCombatReleased", true, true];

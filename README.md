@@ -20,13 +20,18 @@ Move from checkpoint to checkpoint, hold against infected waves, recover supplie
 Players should load the required Steam Workshop items before starting the mission.
 
 - WebKnight's Zombies and Creatures
-- WebKnight / WBK melee dependency used by the zombie AI
+- Improved Melee System
+
+CBA_A3 is not directly required by this mission code at the moment. If any subscribed dependency requires it, Steam Workshop will normally pull it through that dependency.
+
+## Optional Workshop Items
+
+The mission can use RHS content for extra weapons, gear, and vehicle variety when it is loaded, but RHS is not a hard requirement. Without RHS, the mission falls back to base-game equipment and vehicles.
+
 - RHSUSAF
 - RHSAFRF
 - RHSGREF
 - RHSSAF
-
-CBA_A3 is not directly required by this mission code at the moment. If any subscribed dependency requires it, Steam Workshop will normally pull it through that dependency.
 
 ## DLC
 
@@ -160,4 +165,4 @@ Upstream credits:
 
 This mission is not the original co10_Escape or co10_Escape_SableVII mission. It has been renamed, heavily modified, and published as Missions: Patrol LWH CO-10.
 
-Third-party Workshop dependencies such as WebKnight's Zombies and Creatures, WBK melee dependencies, and RHS are not bundled, repacked, or relicensed by this repository. Subscribe to those dependencies from their original Workshop pages.
+Third-party Workshop dependencies such as WebKnight's Zombies and Creatures, Improved Melee System, and optional RHS items are not bundled, repacked, or relicensed by this repository. Subscribe to those dependencies from their original Workshop pages.
