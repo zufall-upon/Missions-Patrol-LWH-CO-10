@@ -9024,7 +9024,7 @@ KFH_fnc_completeMission = {
 };
 
 KFH_fnc_waitForInitialCombatReady = {
-    private _deadline = diag_tickTime + KFH_initialWaveReadyTimeout;
+    private _deadline = -1;
     private _ready = false;
     private _hasHumans = false;
     private _humanCount = 0;
@@ -9032,6 +9032,14 @@ KFH_fnc_waitForInitialCombatReady = {
 
     waitUntil {
         sleep 0.5;
+        if (
+            (missionNamespace getVariable ["KFH_initialWaveSpawnStarted", false]) ||
+            {(missionNamespace getVariable ["KFH_currentWave", 0]) > 0}
+        ) exitWith {
+            _ready = false;
+            true
+        };
+
         private _humans = [] call KFH_fnc_getHumanPlayers;
         _humanCount = count _humans;
         _hasHumans = _humanCount > 0;
@@ -9040,18 +9048,77 @@ KFH_fnc_waitForInitialCombatReady = {
         });
         _ready = _readyCount > 0;
 
-        _ready || {diag_tickTime >= _deadline && {_hasHumans}}
+        if (_hasHumans && {_deadline < 0}) then {
+            _deadline = diag_tickTime + KFH_initialWaveReadyTimeout;
+            missionNamespace setVariable ["KFH_initialWaveFirstHumanSeenAt", diag_tickTime, true];
+            [format ["Initial wave wait detected players; timeout window started (%1 humans).", _humanCount]] call KFH_fnc_log;
+        };
+
+        _ready || {_deadline >= 0 && {diag_tickTime >= _deadline}}
     };
 
     sleep KFH_initialWaveReadyBuffer;
 
-    if (_ready) then {
-        [format ["Initial wave released after player starter loadout readiness (%1/%2 ready).", _readyCount, _humanCount]] call KFH_fnc_log;
-    } else {
-        [format ["Initial wave readiness timed out in real time; releasing wave after safety buffer (%1/%2 ready).", _readyCount, _humanCount]] call KFH_fnc_log;
+    if (
+        (missionNamespace getVariable ["KFH_initialWaveSpawnStarted", false]) ||
+        {(missionNamespace getVariable ["KFH_currentWave", 0]) > 0}
+    ) exitWith {};
+
+    if (_ready) exitWith {
+        ["ready wait thread", _readyCount, _humanCount] call KFH_fnc_releaseInitialWave;
     };
 
+    ["real-time timeout wait thread", _readyCount, _humanCount] call KFH_fnc_releaseInitialWave;
+};
+
+KFH_fnc_releaseInitialWave = {
+    params [["_reason", "unknown"], ["_readyCount", 0], ["_humanCount", 0]];
+
+    if (!isServer) exitWith { false };
+    if (missionNamespace getVariable ["KFH_initialWaveSpawnStarted", false]) exitWith { false };
+    if ((missionNamespace getVariable ["KFH_currentWave", 0]) > 0) exitWith { false };
+
+    missionNamespace setVariable ["KFH_initialWaveSpawnStarted", true, true];
     missionNamespace setVariable ["KFH_initialCombatReleased", true, true];
+
+    if ((_reason find "ready") >= 0) then {
+        [format ["Initial wave released after player starter loadout readiness (%1/%2 ready, reason=%3).", _readyCount, _humanCount, _reason]] call KFH_fnc_log;
+    } else {
+        [format ["Initial wave readiness timed out in real time; releasing wave after safety buffer (%1/%2 ready, reason=%3).", _readyCount, _humanCount, _reason]] call KFH_fnc_log;
+    };
+
+    [1, 1, true] call KFH_fnc_spawnCheckpointWave;
+    true
+};
+
+KFH_fnc_pollInitialWaveRelease = {
+    if (!isServer) exitWith {};
+    if (missionNamespace getVariable ["KFH_initialWaveSpawnStarted", false]) exitWith {};
+    if ((missionNamespace getVariable ["KFH_currentWave", 0]) > 0) exitWith {};
+    if ((missionNamespace getVariable ["KFH_phase", "boot"]) isNotEqualTo "assault") exitWith {};
+
+    private _humans = [] call KFH_fnc_getHumanPlayers;
+    private _humanCount = count _humans;
+    if (_humanCount <= 0) exitWith {};
+
+    private _readyCount = count (_humans select {
+        alive _x && {_x getVariable ["KFH_clientReadyForInitialWave", false]}
+    });
+
+    if (_readyCount > 0) exitWith {
+        ["ready watchdog", _readyCount, _humanCount] call KFH_fnc_releaseInitialWave;
+    };
+
+    private _firstSeen = missionNamespace getVariable ["KFH_initialWaveFirstHumanSeenAt", -1];
+    if (_firstSeen < 0) then {
+        _firstSeen = diag_tickTime;
+        missionNamespace setVariable ["KFH_initialWaveFirstHumanSeenAt", _firstSeen, true];
+        [format ["Initial wave watchdog detected players; timeout window started (%1 humans).", _humanCount]] call KFH_fnc_log;
+    };
+
+    if ((diag_tickTime - _firstSeen) >= KFH_initialWaveReadyTimeout) then {
+        ["real-time timeout watchdog", _readyCount, _humanCount] call KFH_fnc_releaseInitialWave;
+    };
 };
 
 KFH_fnc_applyEnemyAccuracyPreset = {
@@ -9328,6 +9395,8 @@ KFH_fnc_serverInit = {
     missionNamespace setVariable ["KFH_wipeLocked", false, true];
     missionNamespace setVariable ["KFH_wipePendingSince", -1];
     missionNamespace setVariable ["KFH_initialCombatReleased", false, true];
+    missionNamespace setVariable ["KFH_initialWaveSpawnStarted", false, true];
+    missionNamespace setVariable ["KFH_initialWaveFirstHumanSeenAt", -1, true];
     missionNamespace setVariable ["KFH_nextPressureAt", time + KFH_pressureTickSeconds];
     missionNamespace setVariable ["KFH_nextPressureEmergencyAt", 0];
     missionNamespace setVariable ["KFH_nextReinforceAt", time + KFH_reinforceSeconds];
@@ -9376,10 +9445,10 @@ KFH_fnc_serverInit = {
     if (!_extractionTestMode) then {
         [] spawn {
             [] call KFH_fnc_waitForInitialCombatReady;
-            [1, 1, true] call KFH_fnc_spawnCheckpointWave;
         };
     } else {
         missionNamespace setVariable ["KFH_initialCombatReleased", true, true];
+        missionNamespace setVariable ["KFH_initialWaveSpawnStarted", true, true];
     };
 
     while { true } do {
@@ -9392,6 +9461,9 @@ KFH_fnc_serverInit = {
         private _combatReadyFriendlies = [] call KFH_fnc_getCombatReadyFriendlies;
         [] call KFH_fnc_trackPlayerReviveTransitions;
         ["KFH_combatReadyFriendlies", count _combatReadyFriendlies] call KFH_fnc_setState;
+        if (!_extractionTestMode) then {
+            [] call KFH_fnc_pollInitialWaveRelease;
+        };
         private _currentPressureTickSeconds = if (_phase isEqualTo "extract") then {
             missionNamespace getVariable ["KFH_extractPressureTickCurrent", KFH_extractPressureTickSeconds]
         } else {
