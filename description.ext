@@ -1,8 +1,8 @@
 author = "MobmateTeam";
 onLoadName = "KFH_Patrol_LWH_co10";
-onLoadMission = "12-player PvEvE route survival focused on pressure, checkpoints, and extraction.";
+onLoadMission = "12-player PvEvE route survival. Every 7th wave becomes a rush; manage pressure, checkpoints, and extraction.";
 loadScreen = "";
-overviewText = "Outbreak patrol survival: take the long way home through PvEvE checkpoints.";
+overviewText = "Outbreak patrol survival: every 7th wave becomes a rush on the long way home.";
 disabledAI = 1;
 staminaCoef = 0.2;
 independentFriendly = 0;
@@ -33,61 +33,285 @@ class Header
 
 class Params
 {
-    class KFH_Difficulty
+    class KFH_ParamsHeader_Debug
     {
-        title = "KFH_Patrol_LWH_co10 Difficulty";
-        values[] = {0,1,2,3};
-        texts[] = {"Easy","Normal","Hard","Very Hard"};
-        default = 1;
+        title = "==== Debug / Test ====";
+        values[] = {0};
+        texts[] = {""};
+        default = 0;
     };
     class KFH_ExtractionTestMode
     {
-        title = "KFH_Patrol_LWH_co10 Extraction Test";
+        title = "Extraction Test";
         values[] = {0,1,2};
         texts[] = {"Disabled","Heli Extraction","Finale Rush"};
         default = 0;
     };
+    class KFH_ScalingTestAllies
+    {
+        title = "AI Scaling Test Allies";
+        values[] = {0,3,7,11};
+        texts[] = {"Disabled","3 AI allies / 4-player scale","7 AI allies / 8-player scale","11 AI allies / 12-player scale"};
+        default = 0;
+    };
+    class KFH_ParamsHeader_Extraction
+    {
+        title = "==== Extraction Settings ====";
+        values[] = {0};
+        texts[] = {""};
+        default = 0;
+    };
+    class KFH_ExtractionType
+    {
+        title = "Extraction Finale Mode";
+        values[] = {0,1};
+        texts[] = {"Heli + Finale Rush","Heli Only"};
+        default = 0;
+    };
+    class KFH_ExtractionMaxDistance
+    {
+        title = "Extraction Heli Spawn Distance";
+        values[] = {0,650,950,1250,1600};
+        texts[] = {"Random","650m","950m","1250m","1600m"};
+        default = 0;
+    };
+    class KFH_ParamsHeader_Area
+    {
+        title = "==== Area Settings ====";
+        values[] = {0};
+        texts[] = {""};
+        default = 0;
+    };
+    class KFH_StartPatrolVehicleMax
+    {
+        title = "Start Vehicle Count";
+        values[] = {0,2,4,6,8,12};
+        texts[] = {"None","2","4","6","8","12"};
+        default = 6;
+    };
+    class KFH_CheckpointVehicleCount
+    {
+        title = "Checkpoint Mobility Vehicle Count";
+        values[] = {0,1,2,3};
+        texts[] = {"None","1","2","3"};
+        default = 2;
+    };
+    class KFH_FinalArsenalCooldown
+    {
+        title = "Final Arsenal Cooldown";
+        values[] = {0,60,180,300,600};
+        texts[] = {"None","60s","180s","300s","600s"};
+        default = 300;
+    };
+    class KFH_CivilianTrafficFrequency
+    {
+        title = "Civilian Traffic / Scene Scale";
+        values[] = {0,25,50,100,150};
+        texts[] = {"None","Low","Normal","High","Too much"};
+        default = 100;
+    };
+    class KFH_EnemyTrafficFrequency
+    {
+        title = "Military Traffic Scale";
+        values[] = {0,50,100,150};
+        texts[] = {"None","Few","Several","Many"};
+        default = 100;
+    };
+    class KFH_RoadblockCount
+    {
+        title = "Route Dressing / Roadblock Amount";
+        values[] = {0,50,100,150};
+        texts[] = {"None","Few","Several","Many"};
+        default = 100;
+    };
+    class KFH_EnemySpawnDistance
+    {
+        title = "Enemy Spawn Distance";
+        values[] = {0,1,2};
+        texts[] = {"Short","Normal","Long"};
+        default = 0;
+    };
+    class KFH_VillagePatrolSpawns
+    {
+        title = "Military Foot Patrol Scale";
+        values[] = {0,50,100,150};
+        texts[] = {"None","Low","Normal","High"};
+        default = 100;
+    };
+    class KFH_CivilianSuicideBombFrequency
+    {
+        title = "Civilian Kill Explosion Chance";
+        values[] = {0,5,8,15,25};
+        texts[] = {"0%","5%","8%","15%","25%"};
+        default = 8;
+    };
+    class KFH_ParamsHeader_Local
+    {
+        title = "==== Local / Session ====";
+        values[] = {0};
+        texts[] = {""};
+        default = 0;
+    };
     class KFH_RouteScale
     {
-        title = "KFH_Patrol_LWH_co10 Route Scale";
+        title = "Route Scale";
         values[] = {100,50,33};
         texts[] = {"Full","Half","One Third Test"};
         default = 100;
     };
     class KFH_CheckpointCount
     {
-        title = "KFH_Patrol_LWH_co10 Checkpoints";
+        title = "Checkpoints";
         values[] = {3,4,5,6,7,8,9,10};
         texts[] = {"3","4","5","6","7","8","9","10"};
         default = 6;
     };
     class KFH_AnnouncementLanguage
     {
-        title = "KFH_Patrol_LWH_co10 Announcement Language";
+        title = "Announcement Language";
         values[] = {0,1,2};
         texts[] = {"Japanese","English","Chinese (Simplified)"};
         default = 0;
     };
+    class KFH_ParamsHeader_Environment
+    {
+        title = "==== Environment / Visibility ====";
+        values[] = {0};
+        texts[] = {""};
+        default = 0;
+    };
+    class KFH_TimeOfDay
+    {
+        title = "Time Of Day";
+        values[] = {6,12,18,0};
+        texts[] = {"Daytime","Noon","Evening","Night"};
+        default = 6;
+    };
+    class KFH_TimeMultiplier
+    {
+        title = "Time Multiplier (Fasttime)";
+        values[] = {1,2,4,8,12};
+        texts[] = {"1:1 (Normal)","2x","4x","8x","12x"};
+        default = 1;
+    };
+    class KFH_CloudCover
+    {
+        title = "Cloud Cover";
+        values[] = {0,18,50,75,100};
+        texts[] = {"No Clouds","Light","Half","Overcast","Storm Clouds"};
+        default = 18;
+    };
+    class KFH_FogDensity
+    {
+        title = "Fog Density";
+        values[] = {0,15,35,60};
+        texts[] = {"No Fog","Light","Medium","Heavy"};
+        default = 0;
+    };
+    class KFH_Wind
+    {
+        title = "Wind";
+        values[] = {0,1,2,3};
+        texts[] = {"No Wind","Light","Strong","Storm"};
+        default = 0;
+    };
+    class KFH_RainDensity
+    {
+        title = "Rain Density";
+        values[] = {0,25,60,90};
+        texts[] = {"No Rain","Light","Heavy","Storm"};
+        default = 0;
+    };
+    class KFH_GrassVisibility
+    {
+        title = "Grass Visibility";
+        values[] = {0,1,2,3};
+        texts[] = {"No Grass","Low","Normal","High"};
+        default = 2;
+    };
+    class KFH_ParamsHeader_Difficulty
+    {
+        title = "==== Difficulty ====";
+        values[] = {0};
+        texts[] = {""};
+        default = 0;
+    };
+    class KFH_Difficulty
+    {
+        title = "Difficulty";
+        values[] = {0,1,2,3};
+        texts[] = {"Easy","Normal","Hard","Very Hard"};
+        default = 1;
+    };
+    class KFH_EnemySkill
+    {
+        title = "Enemy Skill";
+        values[] = {75,100,125,150};
+        texts[] = {"Easy","Normal","Hard","Very Hard"};
+        default = 100;
+    };
     class KFH_EnemyAccuracy
     {
-        title = "KFH_Patrol_LWH_co10 Enemy Fire Accuracy";
+        title = "Enemy Fire Accuracy";
         values[] = {0,1,2,3,4};
         texts[] = {"Very Low","Low","Normal","High","Very High"};
         default = 1;
     };
     class KFH_ThreatScale
     {
-        title = "KFH_Patrol_LWH_co10 Enemy Density";
+        title = "Enemy Spawn Density";
         values[] = {75,100,125,150,200};
         texts[] = {"Light","Normal","Harder","Dense","Very Dense"};
         default = 100;
     };
-    class KFH_ScalingTestAllies
+    class KFH_WaveSizeScale
     {
-        title = "KFH_Patrol_LWH_co10 AI Scaling Test Allies";
-        values[] = {0,3,7,11};
-        texts[] = {"Disabled","3 AI allies / 4-player scale","7 AI allies / 8-player scale","11 AI allies / 12-player scale"};
-        default = 0;
+        title = "Wave Size Multiplier";
+        values[] = {75,100,125,150,200};
+        texts[] = {"Players 0.75:1","Players 1:1","Players 1.25:1","Players 1.5:1","Players 2:1"};
+        default = 100;
+    };
+    class KFH_WaveIntervalScale
+    {
+        title = "Wave Interval";
+        values[] = {125,100,85,70};
+        texts[] = {"Longer","Normal","Short","Very Short"};
+        default = 100;
+    };
+    class KFH_SpecialThreatScale
+    {
+        title = "Special Threats";
+        values[] = {50,75,100,125,150};
+        texts[] = {"Rare","Reduced","Normal","More","Many"};
+        default = 100;
+    };
+    class KFH_PressureScale
+    {
+        title = "Hive Pressure";
+        values[] = {75,100,125,150};
+        texts[] = {"Gentle","Normal","High","Severe"};
+        default = 100;
+    };
+    class KFH_EnemyHardCap
+    {
+        title = "Enemy Hard Cap";
+        values[] = {40,50,65,80,100};
+        texts[] = {"40","50","65","80","100"};
+        default = 50;
+    };
+    class KFH_ArmedEnemyScale
+    {
+        title = "Armed Enemy Mix";
+        values[] = {50,75,100,125,150};
+        texts[] = {"Rare","Reduced","Normal","More","Many"};
+        default = 100;
+    };
+    class KFH_VehicleThreats
+    {
+        title = "Vehicle Hive Pressure";
+        values[] = {0,1};
+        texts[] = {"Disabled","Enabled"};
+        default = 1;
     };
 };
 

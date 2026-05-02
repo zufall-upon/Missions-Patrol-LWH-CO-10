@@ -2,6 +2,8 @@ call compile preprocessFileLineNumbers "scripts\fn_preInit.sqf";
 
 if (!hasInterface) exitWith {};
 
+[] call KFH_fnc_applyLocalVisibilityParams;
+
 [] spawn {
     waitUntil { !isNull player };
     [player] call KFH_fnc_applyStarterLoadout;
@@ -13,7 +15,11 @@ if (!hasInterface) exitWith {};
             !(missionNamespace getVariable ["KFH_dynamicRouteEnabled", false]) ||
             {missionNamespace getVariable ["KFH_dynamicRouteBuilt", false]}
         };
-        [] call KFH_fnc_placePlayerAtDynamicStartOnce;
+        if (didJIP) then {
+            [] call KFH_fnc_placeJipPlayerNearLeaderOnce;
+        } else {
+            [] call KFH_fnc_placePlayerAtDynamicStartOnce;
+        };
     };
     [player] call KFH_fnc_applyFriendlyFireMitigation;
     [player] call KFH_fnc_installPlayerDownedProtection;

@@ -1,4 +1,4 @@
-Missions: Patrol LWH CO-10
+KFH_Patrol_LWH_co10
 
 This mission is a modified/derivative Arma 3 mission based on work and design lineage from co10_Escape / co10_Escape_SableVII.
 
@@ -18,6 +18,6 @@ Upstream credits:
 - Arma 3 port by Vormulac and HyperZ.
 - co10_Escape_SableVII fork and tweaks by SableVII.
 
-This mission is not the original co10_Escape or co10_Escape_SableVII mission. It has been renamed, heavily modified, and published as Missions: Patrol LWH CO-10.
+This mission is not the original co10_Escape or co10_Escape_SableVII mission. It has been renamed, heavily modified, and published as KFH_Patrol_LWH_co10.
 
 Third-party Workshop dependencies are not bundled or repacked. Players should subscribe to required dependencies from their original Workshop pages.

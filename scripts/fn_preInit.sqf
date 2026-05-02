@@ -1,6 +1,14 @@
 diag_log "[KFH] Bootstrap compile starting.";
 
-if (isNil "KFH_targetPlayers") then {
+if (
+    (isNil "KFH_targetPlayers") ||
+    {isNil "KFH_rushEveryWaves"} ||
+    {isNil "KFH_playerLoadCoef"} ||
+    {isNil "KFH_starterSidearms"} ||
+    {isNil "KFH_starterUniforms"} ||
+    {isNil "KFH_topHudUpdateSeconds"} ||
+    {isNil "KFH_loadoutTrackSeconds"}
+) then {
     call compile preprocessFileLineNumbers "scripts\kfh_settings.sqf";
 };
 

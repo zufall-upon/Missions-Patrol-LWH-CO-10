@@ -174,6 +174,26 @@ KFH_announcementTextTable = [
         "%1。ダウン中の味方 %2 名が戦線復帰したデス。",
         "%1. %2 downed teammate(s) are back in the fight.",
         "%1。%2 名倒地队友已返回战斗。"
+    ]],
+    ["wave_cleanup_warning", [
+        "HQ: 各Waveはできるだけ掃討してから進むデス。残した敵はHive Pressureに拾われて、後続Waveで利息つきで戻るデス。",
+        "HQ: Clear each wave before moving on when you can. Left-behind hostiles feed Hive Pressure and return in later waves with interest.",
+        "HQ：尽量在推进前清理每一波。被留下的敌人会增强蜂巢压力，并在后续波次中带着利息回来。"
+    ]],
+    ["melee_controls_tip", [
+        "HQ: 近接攻撃のデフォルトは Ctrl+9、ドッジは Space デス。キー確認は 操作設定 > キーボード > アドオン: WebKnight's Melee デス。",
+        "HQ: Default melee attack is Ctrl+9, and dodge is Space. Check Controls > Keyboard > Addon: WebKnight's Melee for keybinds.",
+        "HQ：默认近战攻击为 Ctrl+9，闪避为空格键。按键请在 控制 > 键盘 > 插件: WebKnight's Melee 中确认。"
+    ]],
+    ["wave_debt_accrued_warning", [
+        "HQ: %1 体を残してCPを確保したデス。残敵は後続Waveに回るデス。次は掃討優先が安全デス。",
+        "HQ: Checkpoint secured with %1 hostile(s) left behind. They will return in later waves. Clearing the wave first is safer.",
+        "HQ：检查点已确保，但留下了 %1 名敌人。它们会在后续波次中回来。优先清理波次会更安全。"
+    ]],
+    ["player_downed_announcement", [
+        "HQ: %1 がダウンしたデス。安全を確保してReviveして。",
+        "HQ: %1 is down. Secure the area and revive them.",
+        "HQ：%1 已倒地。请先确保安全，然后进行复活。"
     ]]
 ];
 
@@ -1154,6 +1174,44 @@ KFH_fnc_placePlayerAtDynamicStartOnce = {
     player setPosATL _targetPos;
     player setVariable ["KFH_dynamicStartPlaced", true, true];
     [format ["Patrol start synced to dynamic route: %1", mapGridPosition _startPos]] call KFH_fnc_log;
+};
+
+KFH_fnc_placeJipPlayerNearLeaderOnce = {
+    if (player getVariable ["KFH_jipJoinPlaced", false]) exitWith {};
+
+    private _candidates = ([] call KFH_fnc_getHumanPlayers) select {
+        _x isNotEqualTo player &&
+        {alive _x} &&
+        {!([_x] call KFH_fnc_isIncapacitated)}
+    };
+    private _anchor = if ((count _candidates) > 0) then {
+        ([_candidates, [], {_x distance2D player}, "ASCEND"] call BIS_fnc_sortBy) select 0
+    } else {
+        objNull
+    };
+    private _anchorPos = if (!isNull _anchor) then {
+        getPosATL _anchor
+    } else {
+        missionNamespace getVariable ["KFH_respawnAnchorPos", getMarkerPos "kfh_start"]
+    };
+    private _dir = if (!isNull _anchor) then { getDir _anchor } else { markerDir "kfh_start" };
+    private _angle = _dir + 180 + random 80 - 40;
+    private _radius = 3 + random 3;
+    private _targetPos = [
+        (_anchorPos select 0) + (sin _angle) * _radius,
+        (_anchorPos select 1) + (cos _angle) * _radius,
+        0
+    ];
+
+    player setDir _dir;
+    player setPosATL _targetPos;
+    player setVariable ["KFH_jipJoinPlaced", true, true];
+    [format [
+        "JIP player %1 joined near %2 at %3.",
+        name player,
+        if (!isNull _anchor) then { name _anchor } else { "respawn anchor" },
+        mapGridPosition _targetPos
+    ]] call KFH_fnc_log;
 };
 
 KFH_fnc_spawnOutbreakObject = {
@@ -3727,6 +3785,46 @@ KFH_fnc_playReviveGetUpAnimation = {
     };
 };
 
+KFH_fnc_applyDownedWaitPoseLocal = {
+    params ["_unit"];
+
+    if (isNull _unit) exitWith {};
+    if !(alive _unit) exitWith {};
+    if !(_unit getVariable ["KFH_forcedDowned", false]) exitWith {};
+    if ((vehicle _unit) isNotEqualTo _unit) exitWith {};
+
+    private _anim = missionNamespace getVariable ["KFH_downedWaitAnimation", "AinjPpneMstpSnonWrflDnon"];
+    _unit setUnitPos "DOWN";
+    _unit switchMove _anim;
+};
+
+KFH_fnc_startDownedPoseRefresh = {
+    params ["_unit"];
+
+    if (isNull _unit) exitWith {};
+    if (_unit getVariable ["KFH_downedPoseRefreshActive", false]) exitWith {};
+
+    _unit setVariable ["KFH_downedPoseRefreshActive", true, true];
+    [_unit] spawn {
+        params ["_trackedUnit"];
+
+        private _interval = missionNamespace getVariable ["KFH_downedPoseRefreshSeconds", 1.2];
+        while {
+            !isNull _trackedUnit &&
+            {alive _trackedUnit} &&
+            {_trackedUnit getVariable ["KFH_forcedDowned", false]}
+        } do {
+            [_trackedUnit] remoteExecCall ["KFH_fnc_applyDownedWaitPoseLocal", 0];
+            sleep _interval;
+        };
+
+        if (!isNull _trackedUnit) then {
+            _trackedUnit setVariable ["KFH_downedPoseRefreshActive", false, true];
+            _trackedUnit setUnitPos "AUTO";
+        };
+    };
+};
+
 KFH_fnc_findVehicleCasualtySafePosition = {
     params ["_vehicle", ["_rescuer", objNull]];
 
@@ -3734,6 +3832,7 @@ KFH_fnc_findVehicleCasualtySafePosition = {
 
     private _origin = getPosATL _vehicle;
     private _safeDistance = missionNamespace getVariable ["KFH_vehicleCasualtyPullSafeDistance", 12];
+    private _hullClearance = missionNamespace getVariable ["KFH_vehicleCasualtyPullHullClearance", 0.85];
     private _maxDistance = missionNamespace getVariable ["KFH_vehicleCasualtyPullMaxDistance", 55];
     private _maxObjectiveDistance = missionNamespace getVariable ["KFH_vehicleCasualtyPullMaxObjectiveDistance", 520];
     private _objectiveFallbackDistance = missionNamespace getVariable ["KFH_vehicleCasualtyPullObjectiveFallbackDistance", 85];
@@ -3757,6 +3856,56 @@ KFH_fnc_findVehicleCasualtySafePosition = {
         _origin set [2, 0];
         [format ["Vehicle casualty pull used objective fallback because vehicle position was invalid: %1.", _origin]] call KFH_fnc_log;
     };
+
+    private _nearPullResult = [];
+    if !(_originInvalid) then {
+        private _bounds = boundingBoxReal _vehicle;
+        private _min = _bounds select 0;
+        private _max = _bounds select 1;
+        private _clamp = {
+            params ["_value", "_low", "_high"];
+            (_value max _low) min _high
+        };
+        private _candidateLocals = [];
+
+        if !(isNull _rescuer) then {
+            private _rel = _vehicle worldToModel (getPosATL _rescuer);
+            private _relX = _rel select 0;
+            private _relY = _rel select 1;
+            private _x = [_relX, _min select 0, _max select 0] call _clamp;
+            private _y = [_relY, _min select 1, _max select 1] call _clamp;
+            if ((abs _relX) > (abs _relY)) then {
+                _x = if (_relX >= 0) then {(_max select 0) + _hullClearance} else {(_min select 0) - _hullClearance};
+            } else {
+                _y = if (_relY >= 0) then {(_max select 1) + _hullClearance} else {(_min select 1) - _hullClearance};
+            };
+            _candidateLocals pushBack [_x, _y, 0];
+        };
+
+        _candidateLocals append [
+            [(_max select 0) + _hullClearance, 0, 0],
+            [(_min select 0) - _hullClearance, 0, 0],
+            [0, (_max select 1) + _hullClearance, 0],
+            [0, (_min select 1) - _hullClearance, 0]
+        ];
+
+        private _nearResult = [];
+        {
+            if (_nearResult isEqualTo []) then {
+                private _candidate = _vehicle modelToWorld _x;
+                _candidate set [2, 0];
+                if (!surfaceIsWater _candidate) then {
+                    _nearResult = +_candidate;
+                };
+            };
+        } forEach _candidateLocals;
+
+        if !(_nearResult isEqualTo []) then {
+            _nearPullResult = +_nearResult;
+        };
+    };
+
+    if !(_nearPullResult isEqualTo []) exitWith { _nearPullResult };
 
     private _directions = [];
 
@@ -3857,6 +4006,24 @@ KFH_fnc_extractCasualtyFromVehicle = {
     true
 };
 
+KFH_fnc_announcePlayerDowned = {
+    params ["_unit", ["_reason", "downed"]];
+
+    if (!isServer) exitWith {
+        [_unit, _reason] remoteExecCall ["KFH_fnc_announcePlayerDowned", 2];
+    };
+    if (isNull _unit) exitWith {};
+    if !(isPlayer _unit) exitWith {};
+
+    private _lastAnnouncedAt = _unit getVariable ["KFH_lastDownedAnnouncementAt", -1];
+    private _minInterval = missionNamespace getVariable ["KFH_playerDownedAnnouncementMinInterval", 8];
+    if (_lastAnnouncedAt >= 0 && {(time - _lastAnnouncedAt) < _minInterval}) exitWith {};
+
+    _unit setVariable ["KFH_lastDownedAnnouncementAt", time, true];
+    ["player_downed_announcement", [name _unit]] call KFH_fnc_notifyAllKey;
+    [format ["Player downed announcement: %1 reason=%2.", name _unit, _reason]] call KFH_fnc_log;
+};
+
 KFH_fnc_forceUnitDowned = {
     params ["_unit", ["_source", objNull], ["_reason", "fatal damage"]];
 
@@ -3865,6 +4032,10 @@ KFH_fnc_forceUnitDowned = {
 
     _unit setVariable ["KFH_forcedDowned", true, true];
     _unit setVariable ["KFH_forcedDownedAt", time, true];
+    if (!isServer && {isPlayer _unit}) then {
+        private _sourceType = if (isNull _source) then { "unknown" } else { typeOf _source };
+        [_unit, _sourceType, _reason] remoteExecCall ["KFH_fnc_registerForcedDownedOnServer", 2];
+    };
     if ((vehicle _unit) isNotEqualTo _unit) then {
         _unit setVariable ["KFH_downedInsideVehicle", vehicle _unit, true];
         _unit setVariable ["KFH_needsVehiclePull", true, true];
@@ -3873,12 +4044,17 @@ KFH_fnc_forceUnitDowned = {
         _unit setVariable ["KFH_needsVehiclePull", false, true];
     };
     _unit setCaptive true;
+    _unit setUnconscious true;
     _unit setDamage (missionNamespace getVariable ["KFH_forcedDownedDamage", 0.86]);
     _unit allowDamage false;
-    _unit switchMove "AinjPpneMstpSnonWrflDnon";
+    [_unit] call KFH_fnc_startDownedPoseRefresh;
+    [_unit] remoteExecCall ["KFH_fnc_applyDownedWaitPoseLocal", 0];
 
     if (isPlayer _unit) then {
         missionNamespace setVariable ["KFH_lastHumanCasualtyAt", time, true];
+        if (isServer) then {
+            [_unit, _reason] call KFH_fnc_announcePlayerDowned;
+        };
         if (local _unit) then {
             missionNamespace setVariable ["KFH_reviveCleanupUntil", -1];
             ["Downed. Hold on for revive support."] call KFH_fnc_localNotify;
@@ -4002,6 +4178,7 @@ KFH_fnc_installPlayerDownedProtection = {
         missionNamespace setVariable ["KFH_respawnAsDownedVehicle", if (_wasInVehicle) then { _vehicle } else { objNull }];
         missionNamespace setVariable ["KFH_respawnAsDownedWasVehicle", _wasInVehicle];
         missionNamespace setVariable ["KFH_lastHumanCasualtyAt", time, true];
+        [_unit, "killed fallback"] call KFH_fnc_announcePlayerDowned;
         [format [
             "Respawn fallback armed for %1. Killer=%2 vehicle=%3.",
             name _unit,
@@ -4081,6 +4258,27 @@ KFH_fnc_getCheckpointSecureCooldown = {
     missionNamespace getVariable ["KFH_checkpointSecureCooldownSeconds", KFH_checkpointSecureCooldownSeconds]
 };
 
+KFH_fnc_registerForcedDownedOnServer = {
+    params ["_unit", ["_sourceType", "unknown"], ["_reason", "fatal damage"]];
+
+    if (!isServer) exitWith {};
+    if (isNull _unit) exitWith {};
+    if !(alive _unit) exitWith {};
+
+    _unit setVariable ["KFH_forcedDowned", true, true];
+    _unit setVariable ["KFH_forcedDownedAt", time, true];
+    missionNamespace setVariable ["KFH_lastHumanCasualtyAt", time, true];
+    [_unit, _reason] call KFH_fnc_announcePlayerDowned;
+
+    [format [
+        "Forced downed server sync for %1 reason=%2 source=%3 rescuers=%4.",
+        name _unit,
+        _reason,
+        _sourceType,
+        count ([] call KFH_fnc_getPotentialRescuers)
+    ]] call KFH_fnc_log;
+};
+
 KFH_fnc_reducePressure = {
     params ["_amount", ["_reason", "Pressure relief"]];
 
@@ -4111,8 +4309,12 @@ KFH_fnc_hasRecentHumanCasualtyGrace = {
 };
 
 KFH_fnc_hasReviveChance = {
-    ((count ([] call KFH_fnc_getIncapacitatedPlayers)) > 0) &&
-    ((count ([] call KFH_fnc_getPotentialRescuers)) > 0)
+    if ((count ([] call KFH_fnc_getIncapacitatedPlayers)) isEqualTo 0) exitWith { false };
+    if ((count ([] call KFH_fnc_getPotentialRescuers)) > 0) exitWith { true };
+
+    KFH_debugTeammateEnabled &&
+    {((count ([] call KFH_fnc_getHumanPlayers)) > 0)} &&
+    {((count ([] call KFH_fnc_getHumanPlayers)) <= KFH_debugTeammateHumanThreshold)}
 };
 
 KFH_fnc_autoRevivePlayers = {
@@ -4405,29 +4607,36 @@ KFH_fnc_applyStarterLoadout = {
 
     if (isNull _unit) exitWith {};
 
+    private _starterOptionalAllowed = isServer || {
+        missionNamespace getVariable ["KFH_optionalContentAvailableOnServer", false]
+    };
     private _cupChance = missionNamespace getVariable ["KFH_cupStarterPreferredChance", 0.9];
+    private _optionalUniforms = if (_starterOptionalAllowed) then { missionNamespace getVariable ["KFH_cupStarterUniforms", []] } else { [] };
+    private _optionalVests = if (_starterOptionalAllowed) then { missionNamespace getVariable ["KFH_cupStarterVests", []] } else { [] };
+    private _optionalHeadgear = if (_starterOptionalAllowed) then { missionNamespace getVariable ["KFH_cupStarterHeadgear", []] } else { [] };
+    private _optionalSidearms = if (_starterOptionalAllowed) then { missionNamespace getVariable ["KFH_cupStarterSidearms", []] } else { [] };
     private _uniform = [
         "CfgWeapons",
         missionNamespace getVariable ["KFH_starterUniforms", []],
-        missionNamespace getVariable ["KFH_cupStarterUniforms", []],
+        _optionalUniforms,
         _cupChance
     ] call KFH_fnc_selectAvailableConfigClass;
     private _vest = [
         "CfgWeapons",
         missionNamespace getVariable ["KFH_starterVests", []],
-        missionNamespace getVariable ["KFH_cupStarterVests", []],
+        _optionalVests,
         _cupChance
     ] call KFH_fnc_selectAvailableConfigClass;
     private _headgear = [
         "CfgWeapons",
         missionNamespace getVariable ["KFH_starterHeadgear", []],
-        missionNamespace getVariable ["KFH_cupStarterHeadgear", []],
+        _optionalHeadgear,
         _cupChance,
         true
     ] call KFH_fnc_selectAvailableConfigClass;
     private _sidearmEntry = [
         missionNamespace getVariable ["KFH_starterSidearms", []],
-        missionNamespace getVariable ["KFH_cupStarterSidearms", []],
+        _optionalSidearms,
         _cupChance
     ] call KFH_fnc_selectAvailableWeaponBundle;
     if ((count _sidearmEntry) < 2) then {
@@ -4621,6 +4830,29 @@ KFH_fnc_forceInitialStarterLoadout = {
     };
 };
 
+KFH_fnc_retireDebugTeammateIfUnneeded = {
+    params [["_reason", "human backup joined"]];
+
+    private _current = missionNamespace getVariable ["KFH_debugTeammate", objNull];
+    if (isNull _current) exitWith { false };
+    if !(alive _current) exitWith {
+        missionNamespace setVariable ["KFH_debugTeammate", objNull, true];
+        true
+    };
+    if (_current getVariable ["KFH_aiReviveBusy", false]) exitWith { false };
+    if ((count ([] call KFH_fnc_getIncapacitatedPlayers)) > 0) exitWith { false };
+
+    private _groupRef = group _current;
+    [format ["Wingman %1 retired: %2.", name _current, _reason]] call KFH_fnc_log;
+    deleteVehicle _current;
+    missionNamespace setVariable ["KFH_debugTeammate", objNull, true];
+    if (!isNull _groupRef && {({alive _x} count units _groupRef) isEqualTo 0}) then {
+        deleteGroup _groupRef;
+    };
+
+    true
+};
+
 KFH_fnc_debugTeammateLoop = {
     missionNamespace setVariable ["KFH_nextDebugTeammateSpawnAt", 0];
 
@@ -4632,17 +4864,27 @@ KFH_fnc_debugTeammateLoop = {
         if (KFH_debugTeammateEnabled) then {
             private _players = [] call KFH_fnc_getHumanPlayers;
             private _combatReadyHumans = [] call KFH_fnc_getCombatReadyHumans;
+            private _downedHumans = [] call KFH_fnc_getIncapacitatedPlayers;
+
+            if ((count _players) > KFH_debugTeammateHumanThreshold) then {
+                ["human player count above solo threshold"] call KFH_fnc_retireDebugTeammateIfUnneeded;
+            };
 
             if (
                 !(missionNamespace getVariable ["KFH_wipeLocked", false]) &&
                 ((count _players) > 0) &&
                 {(count _players) <= KFH_debugTeammateHumanThreshold} &&
-                {(count _combatReadyHumans) > 0}
+                {((count _combatReadyHumans) > 0) || {(count _downedHumans) > 0}}
             ) then {
                 private _leader = _players select 0;
                 private _current = missionNamespace getVariable ["KFH_debugTeammate", objNull];
 
                 if (isNull _current || {!alive _current}) then {
+                    if ((count _downedHumans) > 0) then {
+                        private _rescueDelay = missionNamespace getVariable ["KFH_debugTeammateRescueRespawnDelay", 3];
+                        private _nextSpawnAt = missionNamespace getVariable ["KFH_nextDebugTeammateSpawnAt", 0];
+                        missionNamespace setVariable ["KFH_nextDebugTeammateSpawnAt", _nextSpawnAt min (time + _rescueDelay)];
+                    };
                     if (time >= (missionNamespace getVariable ["KFH_nextDebugTeammateSpawnAt", 0])) then {
                         [_leader] call KFH_fnc_spawnDebugTeammate;
                         missionNamespace setVariable ["KFH_nextDebugTeammateSpawnAt", time + KFH_debugTeammateRespawnDelay];
@@ -4746,6 +4988,7 @@ KFH_fnc_runDebugTeammateRevive = {
     _medic disableAI "TARGET";
     _medic disableAI "AUTOTARGET";
     _medic doMove (getPosATL _casualty);
+    [format ["%1 moving to revive %2.", name _medic, name _casualty]] call KFH_fnc_log;
 
     private _rescueStartAt = time;
     private _didTeleport = false;
@@ -4799,7 +5042,6 @@ KFH_fnc_runDebugTeammateRevive = {
             _medic setPosATL (_casualty modelToWorld [1.1, -1.0, 0]);
         };
 
-        _medic allowDamage false;
         if ((vehicle _casualty) isNotEqualTo _casualty) then {
             [_casualty, _medic, "Echo pull before revive"] call KFH_fnc_extractCasualtyFromVehicle;
             sleep 0.35;
@@ -4908,13 +5150,24 @@ KFH_fnc_debugTeammateReviveLoop = {
             !isNull _medic &&
             {alive _medic} &&
             {!([_medic] call KFH_fnc_isIncapacitated)} &&
-            {local _medic} &&
             {!(_medic getVariable ["KFH_aiReviveBusy", false])}
         ) then {
             private _casualty = [_medic] call KFH_fnc_pickClosestIncapacitatedAlly;
 
             if !(isNull _casualty) then {
-                [_medic, _casualty] spawn KFH_fnc_runDebugTeammateRevive;
+                if (local _medic) then {
+                    [_medic, _casualty] spawn KFH_fnc_runDebugTeammateRevive;
+                } else {
+                    if (time >= (_medic getVariable ["KFH_aiReviveDispatchAt", 0])) then {
+                        _medic setVariable ["KFH_aiReviveDispatchAt", time + 1.5, true];
+                        [format [
+                            "Dispatching Echo revive to owner: medicLocal=false casualty=%1 owner=%2.",
+                            name _casualty,
+                            owner _medic
+                        ]] call KFH_fnc_log;
+                        [_medic, _casualty] remoteExec ["KFH_fnc_runDebugTeammateRevive", owner _medic];
+                    };
+                };
             };
         };
 
@@ -7157,6 +7410,7 @@ KFH_fnc_configureLeaperProxyInfected = {
     [_unit, false] call KFH_fnc_configureHeavyInfected;
     _unit setVariable ["KFH_enemyRole", "leaper", true];
     _unit setVariable ["KFH_leaperProxy", true, true];
+    _unit setVariable ["KFH_heavyInfectedDamageScale", missionNamespace getVariable ["KFH_leaperProxyDamageScale", 1.1], true];
     _unit enableFatigue false;
     _unit setAnimSpeedCoef (missionNamespace getVariable ["KFH_leaperProxyAnimSpeed", 1.12]);
     _unit setVariable ["KFH_nextLeaperPounceAt", time + 0.8 + random 1.2];
@@ -7170,18 +7424,18 @@ KFH_fnc_configureLeaperProxyInfected = {
     } forEach ["MOVE", "PATH", "TARGET", "AUTOTARGET", "FSM"];
     _unit setBehaviourStrong "COMBAT";
     _unit setCombatMode "RED";
-    _unit setSpeedMode "FULL";
+    _unit setSpeedMode "LIMITED";
     if (missionNamespace getVariable ["KFH_leaperProxyCrawlEnabled", true]) then {
-        _unit setUnitPos "DOWN";
+        _unit setUnitPos (missionNamespace getVariable ["KFH_leaperProxyUnitPos", "MIDDLE"]);
     } else {
         _unit setUnitPos "UP";
     };
-    _unit forceWalk false;
+    _unit forceWalk true;
     (group _unit) allowFleeing 0;
     (group _unit) setBehaviour "COMBAT";
     (group _unit) setCombatMode "RED";
-    (group _unit) setSpeedMode "FULL";
-    [format ["Leaper proxy configured with KFH crawling melee AI at %1.", mapGridPosition _unit]] call KFH_fnc_log;
+    (group _unit) setSpeedMode "LIMITED";
+    [format ["Leaper proxy configured with KFH crouch melee AI at %1.", mapGridPosition _unit]] call KFH_fnc_log;
 };
 
 KFH_fnc_configureJuggernautInfected = {
@@ -7899,7 +8153,7 @@ KFH_fnc_updateMeleeEnemy = {
     };
 
     if (_role isEqualTo "leaper" && {missionNamespace getVariable ["KFH_leaperProxyCrawlEnabled", true]}) then {
-        _unit setUnitPos "DOWN";
+        _unit setUnitPos (missionNamespace getVariable ["KFH_leaperProxyUnitPos", "MIDDLE"]);
     } else {
         _unit setUnitPos "UP";
     };
@@ -7930,13 +8184,16 @@ KFH_fnc_updateMeleeEnemy = {
             {_distance <= _pounceMax} &&
             {time >= (_unit getVariable ["KFH_nextLeaperPounceAt", 0])}
         ) then {
-            _unit setVariable ["KFH_nextLeaperPounceAt", time + (missionNamespace getVariable ["KFH_leaperProxyPounceCooldown", 2.8]) + random 0.8];
-            _unit setDir _targetDir;
-            _unit setVelocityModelSpace [
-                0,
-                missionNamespace getVariable ["KFH_leaperProxyPounceForwardVelocity", 7.5],
-                missionNamespace getVariable ["KFH_leaperProxyPounceUpVelocity", 1.25]
-            ];
+            private _pounceForward = missionNamespace getVariable ["KFH_leaperProxyPounceForwardVelocity", 3.2];
+            if (_pounceForward > 0) then {
+                _unit setVariable ["KFH_nextLeaperPounceAt", time + (missionNamespace getVariable ["KFH_leaperProxyPounceCooldown", 7.5]) + random 1.2];
+                _unit setDir _targetDir;
+                _unit setVelocityModelSpace [
+                    0,
+                    _pounceForward,
+                    missionNamespace getVariable ["KFH_leaperProxyPounceUpVelocity", 0.25]
+                ];
+            };
         };
     };
 
@@ -7946,8 +8203,8 @@ KFH_fnc_updateMeleeEnemy = {
 
     if (_distance <= KFH_meleeWalkDistance) then {
         if (_role isEqualTo "leaper") then {
-            _unit forceWalk false;
-            _unit setSpeedMode "FULL";
+            _unit forceWalk true;
+            _unit setSpeedMode "LIMITED";
             _unit setAnimSpeedCoef _runAnimSpeed;
         } else {
             _unit forceWalk true;
@@ -7955,8 +8212,8 @@ KFH_fnc_updateMeleeEnemy = {
             _unit setAnimSpeedCoef KFH_meleeWalkAnimSpeed;
         };
     } else {
-        _unit forceWalk false;
-        _unit setSpeedMode "FULL";
+        _unit forceWalk (_role isEqualTo "leaper");
+        _unit setSpeedMode (if (_role isEqualTo "leaper") then { "LIMITED" } else { "FULL" });
         _unit setAnimSpeedCoef _runAnimSpeed;
     };
 
@@ -7981,33 +8238,6 @@ KFH_fnc_updateMeleeEnemy = {
         };
         [format ["An infected rusher hit %1.", name _target]] call KFH_fnc_log;
     };
-};
-
-KFH_fnc_playerQuickStrike = {
-    private _unit = player;
-
-    if (isNull _unit) exitWith {};
-    if !(alive _unit) exitWith {};
-    if ([_unit] call KFH_fnc_isIncapacitated) exitWith {};
-    if (time < (_unit getVariable ["KFH_nextQuickStrikeAt", 0])) exitWith {};
-
-    private _targets = (nearestObjects [_unit, ["CAManBase"], KFH_quickStrikeRange]) select {
-        _x != _unit &&
-        alive _x &&
-        side _x isEqualTo east &&
-        ((_x getVariable ["KFH_enemyRole", ""]) isNotEqualTo "")
-    };
-
-    if ((count _targets) isEqualTo 0) exitWith {
-        ["No target in striking range."] call KFH_fnc_localNotify;
-    };
-
-    private _target = _targets select 0;
-    _unit setVariable ["KFH_nextQuickStrikeAt", time + KFH_quickStrikeCooldown];
-    _unit playMoveNow "AmovPercMstpSrasWpstDnon_AinvPercMstpSrasWpstDnon";
-    addCamShake [1.8, 0.16, 8];
-    _target setDamage ((damage _target) + KFH_quickStrikeDamage);
-    [format ["%1 used Quick Strike on %2.", name _unit, typeOf _target]] call KFH_fnc_log;
 };
 
 KFH_fnc_meleeDirectorLoop = {
@@ -8826,6 +9056,7 @@ KFH_fnc_spawnCheckpointWave = {
 
     ["KFH_currentWave", _newWaveNumber] call KFH_fnc_setState;
     missionNamespace setVariable ["KFH_currentWaveStartedAt", time, true];
+    missionNamespace setVariable ["KFH_currentWaveCheckpoint", _checkpointIndex, true];
     if !(missionNamespace getVariable ["KFH_currentWaveHostileCount", -1] > 0) then {
         missionNamespace setVariable ["KFH_currentWaveHostileCount", count _spawnedUnits, true];
     };
@@ -8939,6 +9170,7 @@ KFH_fnc_onCheckpointSecured = {
     };
     [count _skippedObjectiveEnemies, format ["checkpoint %1 secured with hostiles bypassed", _checkpointIndex]] call KFH_fnc_addRushDebt;
     if ((count _skippedObjectiveEnemies) > 0) then {
+        ["wave_debt_accrued_warning", [count _skippedObjectiveEnemies]] call KFH_fnc_notifyAllKey;
         private _activeEnemies = missionNamespace getVariable ["KFH_activeEnemies", []];
         _activeEnemies = _activeEnemies - _skippedObjectiveEnemies;
         missionNamespace setVariable ["KFH_activeEnemies", _activeEnemies];
@@ -9087,6 +9319,14 @@ KFH_fnc_releaseInitialWave = {
         [format ["Initial wave readiness timed out in real time; releasing wave after safety buffer (%1/%2 ready, reason=%3).", _readyCount, _humanCount, _reason]] call KFH_fnc_log;
     };
 
+    if !(missionNamespace getVariable ["KFH_waveCleanupWarningAnnounced", false]) then {
+        missionNamespace setVariable ["KFH_waveCleanupWarningAnnounced", true, true];
+        ["wave_cleanup_warning", [], "RUN"] call KFH_fnc_appendRunEventKey;
+        ["wave_cleanup_warning"] call KFH_fnc_notifyAllKey;
+        ["melee_controls_tip", [], "RUN"] call KFH_fnc_appendRunEventKey;
+        ["melee_controls_tip"] call KFH_fnc_notifyAllKey;
+    };
+
     [1, 1, true] call KFH_fnc_spawnCheckpointWave;
     true
 };
@@ -9139,6 +9379,174 @@ KFH_fnc_applyEnemyAccuracyPreset = {
     missionNamespace setVariable ["KFH_enemyAimingShake", _shake, true];
     missionNamespace setVariable ["KFH_enemyAimingSpeed", _speed, true];
     [format ["Enemy fire accuracy preset applied: %1 accuracy=%2 shake=%3 speed=%4.", _names select _index, _accuracy, _shake, _speed]] call KFH_fnc_log;
+};
+
+KFH_fnc_applyEnvironmentParams = {
+    private _hour = ["KFH_TimeOfDay", missionNamespace getVariable ["KFH_timeOfDayParamDefault", 6]] call BIS_fnc_getParamValue;
+    private _timeMultiplier = ["KFH_TimeMultiplier", missionNamespace getVariable ["KFH_timeMultiplierParamDefault", 1]] call BIS_fnc_getParamValue;
+    private _cloud = (["KFH_CloudCover", missionNamespace getVariable ["KFH_cloudCoverParamDefault", 18]] call BIS_fnc_getParamValue) / 100;
+    private _fog = (["KFH_FogDensity", missionNamespace getVariable ["KFH_fogDensityParamDefault", 0]] call BIS_fnc_getParamValue) / 100;
+    private _rain = (["KFH_RainDensity", missionNamespace getVariable ["KFH_rainDensityParamDefault", 0]] call BIS_fnc_getParamValue) / 100;
+    private _wind = ["KFH_Wind", missionNamespace getVariable ["KFH_windParamDefault", 0]] call BIS_fnc_getParamValue;
+    private _windVector = switch (_wind) do {
+        case 1: { [1.5, 0.5, true] };
+        case 2: { [4, 1.5, true] };
+        case 3: { [7, 3, true] };
+        default { [0, 0, true] };
+    };
+    private _overcast = if (_rain > 0) then { _cloud max 0.5 } else { _cloud };
+
+    setDate [2035, 7, 16, _hour, 20];
+    setTimeMultiplier _timeMultiplier;
+    0 setFog _fog;
+    0 setRain _rain;
+    0 setOvercast _overcast;
+    setWind _windVector;
+    forceWeatherChange;
+    [format ["Environment params applied: hour=%1 timeMultiplier=%2 cloud=%3 fog=%4 rain=%5 wind=%6.", _hour, _timeMultiplier, _overcast, _fog, _rain, _wind]] call KFH_fnc_log;
+};
+
+KFH_fnc_applyLocalVisibilityParams = {
+    private _grass = ["KFH_GrassVisibility", missionNamespace getVariable ["KFH_grassVisibilityParamDefault", 2]] call BIS_fnc_getParamValue;
+    private _terrainGrid = switch (_grass) do {
+        case 0: { 50 };
+        case 1: { 25 };
+        case 3: { 6.25 };
+        default { 12.5 };
+    };
+
+    setTerrainGrid _terrainGrid;
+    [format ["Local visibility params applied: grass=%1 terrainGrid=%2.", _grass, _terrainGrid]] call KFH_fnc_log;
+};
+
+KFH_fnc_applyExtractionAndAreaParams = {
+    private _extractionType = ["KFH_ExtractionType", missionNamespace getVariable ["KFH_extractionTypeParamDefault", 0]] call BIS_fnc_getParamValue;
+    private _extractionDistance = ["KFH_ExtractionMaxDistance", missionNamespace getVariable ["KFH_extractionMaxDistanceParamDefault", 0]] call BIS_fnc_getParamValue;
+    if (_extractionDistance <= 0) then {
+        _extractionDistance = selectRandom [650, 950, 1250, 1600];
+    };
+
+    KFH_extractionHeliSpawnDistance = _extractionDistance;
+    KFH_extractionHeliEvacDistance = (_extractionDistance + 250) max 900;
+    KFH_extractionFinaleRushEnabled = _extractionType isEqualTo 0;
+    missionNamespace setVariable ["KFH_extractionHeliSpawnDistance", KFH_extractionHeliSpawnDistance, true];
+    missionNamespace setVariable ["KFH_extractionHeliEvacDistance", KFH_extractionHeliEvacDistance, true];
+    missionNamespace setVariable ["KFH_extractionFinaleRushEnabled", KFH_extractionFinaleRushEnabled, true];
+
+    KFH_startPatrolVehicleMax = ["KFH_StartPatrolVehicleMax", missionNamespace getVariable ["KFH_startPatrolVehicleMaxParamDefault", KFH_startPatrolVehicleMax]] call BIS_fnc_getParamValue;
+    KFH_checkpointMobilityVehicleCount = ["KFH_CheckpointVehicleCount", missionNamespace getVariable ["KFH_checkpointVehicleCountParamDefault", KFH_checkpointMobilityVehicleCount]] call BIS_fnc_getParamValue;
+    KFH_checkpointMobilityVehicleCountByScale = [];
+    KFH_checkpointMobilityVehicleLateMax = KFH_checkpointMobilityVehicleCount;
+    KFH_finalArsenalCooldownSeconds = ["KFH_FinalArsenalCooldown", missionNamespace getVariable ["KFH_finalArsenalCooldownParamDefault", KFH_finalArsenalCooldownSeconds]] call BIS_fnc_getParamValue;
+
+    [format [
+        "Extraction/area params applied: type=%1 extractDistance=%2 motorPool=%3 checkpointVehicles=%4 arsenalCooldown=%5.",
+        _extractionType,
+        _extractionDistance,
+        KFH_startPatrolVehicleMax,
+        KFH_checkpointMobilityVehicleCount,
+        KFH_finalArsenalCooldownSeconds
+    ]] call KFH_fnc_log;
+};
+
+KFH_fnc_applyTrafficAndSpawnParams = {
+    private _civilianTrafficScale = (["KFH_CivilianTrafficFrequency", missionNamespace getVariable ["KFH_civilianTrafficFrequencyParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _enemyTrafficScale = (["KFH_EnemyTrafficFrequency", missionNamespace getVariable ["KFH_enemyTrafficFrequencyParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _roadblockScale = (["KFH_RoadblockCount", missionNamespace getVariable ["KFH_roadblockCountParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _spawnDistanceMode = ["KFH_EnemySpawnDistance", missionNamespace getVariable ["KFH_enemySpawnDistanceParamDefault", 0]] call BIS_fnc_getParamValue;
+    private _villagePatrolScale = (["KFH_VillagePatrolSpawns", missionNamespace getVariable ["KFH_villagePatrolSpawnsParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _civilianSuicideBombChance = (["KFH_CivilianSuicideBombFrequency", missionNamespace getVariable ["KFH_civilianSuicideBombFrequencyParamDefault", 8]] call BIS_fnc_getParamValue) / 100;
+
+    KFH_ambientTrafficEnabled = _civilianTrafficScale > 0;
+    KFH_ambientTrafficChance = (KFH_ambientTrafficChance * _civilianTrafficScale) min 1;
+    KFH_ambientTrafficVehiclesPerSegment = ceil (KFH_ambientTrafficVehiclesPerSegment * _civilianTrafficScale);
+    missionNamespace setVariable ["KFH_envTrafficMaxCivilianGroups", ceil ((missionNamespace getVariable ["KFH_envTrafficMaxCivilianGroups", KFH_envTrafficMaxCivilianGroups]) * _civilianTrafficScale), true];
+    missionNamespace setVariable ["KFH_envTrafficCivilianChance", ((missionNamespace getVariable ["KFH_envTrafficCivilianChance", KFH_envTrafficCivilianChance]) * _civilianTrafficScale) min 1, true];
+    missionNamespace setVariable ["KFH_outbreakCivilianChance", ((missionNamespace getVariable ["KFH_outbreakCivilianChance", KFH_outbreakCivilianChance]) * _civilianTrafficScale) min 1, true];
+    missionNamespace setVariable ["KFH_envSceneCivilianPedestrianMaxEarly", ceil ((missionNamespace getVariable ["KFH_envSceneCivilianPedestrianMaxEarly", KFH_envSceneCivilianPedestrianMaxEarly]) * _civilianTrafficScale), true];
+    missionNamespace setVariable ["KFH_envSceneCivilianVehicleMaxEarly", ceil ((missionNamespace getVariable ["KFH_envSceneCivilianVehicleMaxEarly", KFH_envSceneCivilianVehicleMaxEarly]) * _civilianTrafficScale), true];
+
+    missionNamespace setVariable ["KFH_envTrafficMaxMilitaryGroups", ceil ((missionNamespace getVariable ["KFH_envTrafficMaxMilitaryGroups", KFH_envTrafficMaxMilitaryGroups]) * _enemyTrafficScale), true];
+    missionNamespace setVariable ["KFH_envTrafficMilitaryChance", ((missionNamespace getVariable ["KFH_envTrafficMilitaryChance", KFH_envTrafficMilitaryChance]) * _enemyTrafficScale) min 1, true];
+    missionNamespace setVariable ["KFH_envTrafficMilitaryArmedChance", ((missionNamespace getVariable ["KFH_envTrafficMilitaryArmedChance", KFH_envTrafficMilitaryArmedChance]) * _enemyTrafficScale) min 1, true];
+    missionNamespace setVariable ["KFH_envTrafficMilitaryArmorShare", ((missionNamespace getVariable ["KFH_envTrafficMilitaryArmorShare", KFH_envTrafficMilitaryArmorShare]) * _enemyTrafficScale) min 1, true];
+    missionNamespace setVariable ["KFH_envTrafficMilitaryMortarShare", ((missionNamespace getVariable ["KFH_envTrafficMilitaryMortarShare", KFH_envTrafficMilitaryMortarShare]) * _enemyTrafficScale) min 1, true];
+
+    if (_roadblockScale <= 0) then {
+        KFH_routeRoadblockOffsets = [];
+        KFH_checkpointDressingSets = [];
+    } else {
+        if (_roadblockScale < 1) then {
+            KFH_routeRoadblockOffsets = KFH_routeRoadblockOffsets select [0, ceil ((count KFH_routeRoadblockOffsets) * _roadblockScale)];
+            KFH_checkpointDressingSets = KFH_checkpointDressingSets select [0, ceil ((count KFH_checkpointDressingSets) * _roadblockScale)];
+        };
+    };
+
+    switch (_spawnDistanceMode) do {
+        case 1: {
+            KFH_spawnMinDistance = 30;
+            KFH_spawnMaxDistance = 50;
+            KFH_spawnAheadMinDistance = 100;
+            KFH_spawnAheadMaxDistance = 160;
+        };
+        case 2: {
+            KFH_spawnMinDistance = 50;
+            KFH_spawnMaxDistance = 80;
+            KFH_spawnAheadMinDistance = 140;
+            KFH_spawnAheadMaxDistance = 220;
+        };
+        default {};
+    };
+
+    missionNamespace setVariable ["KFH_envMilitaryFootPatrolChance", ((missionNamespace getVariable ["KFH_envMilitaryFootPatrolChance", KFH_envMilitaryFootPatrolChance]) * _villagePatrolScale) min 1, true];
+    missionNamespace setVariable ["KFH_envMilitaryFootPatrolMax", ceil ((missionNamespace getVariable ["KFH_envMilitaryFootPatrolMax", KFH_envMilitaryFootPatrolMax]) * _villagePatrolScale), true];
+    missionNamespace setVariable ["KFH_envSceneMilitaryMaxLate", ceil ((missionNamespace getVariable ["KFH_envSceneMilitaryMaxLate", KFH_envSceneMilitaryMaxLate]) * _villagePatrolScale), true];
+    missionNamespace setVariable ["KFH_envSceneMilitaryPerTickLate", ceil ((missionNamespace getVariable ["KFH_envSceneMilitaryPerTickLate", KFH_envSceneMilitaryPerTickLate]) * _villagePatrolScale), true];
+    missionNamespace setVariable ["KFH_civilianKillExplosionChance", _civilianSuicideBombChance, true];
+
+    [format ["Traffic/spawn params applied: civilian=%1 enemyTraffic=%2 roadblocks=%3 spawnDistanceMode=%4 villagePatrols=%5 civilianBombChance=%6.", _civilianTrafficScale, _enemyTrafficScale, _roadblockScale, _spawnDistanceMode, _villagePatrolScale, _civilianSuicideBombChance]] call KFH_fnc_log;
+};
+
+KFH_fnc_applyDetailedDifficultyParams = {
+    private _enemySkillScale = (["KFH_EnemySkill", missionNamespace getVariable ["KFH_enemySkillParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _waveSizeScale = (["KFH_WaveSizeScale", missionNamespace getVariable ["KFH_waveSizeScaleParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _waveIntervalScale = (["KFH_WaveIntervalScale", missionNamespace getVariable ["KFH_waveIntervalScaleParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _specialThreatScale = (["KFH_SpecialThreatScale", missionNamespace getVariable ["KFH_specialThreatScaleParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _pressureScale = (["KFH_PressureScale", missionNamespace getVariable ["KFH_pressureScaleParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+    private _hardCap = ["KFH_EnemyHardCap", missionNamespace getVariable ["KFH_enemyHardCapParamDefault", KFH_activeEnemyHardCap]] call BIS_fnc_getParamValue;
+    private _armedScale = (["KFH_ArmedEnemyScale", missionNamespace getVariable ["KFH_armedEnemyScaleParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
+
+    missionNamespace setVariable [
+        "KFH_waveBaseCounts",
+        (missionNamespace getVariable ["KFH_waveBaseCounts", KFH_waveBaseCounts]) apply { ceil (_x * _waveSizeScale) }
+    ];
+    missionNamespace setVariable ["KFH_waveCooldownNormalMinSeconds", round ((missionNamespace getVariable ["KFH_waveCooldownNormalMinSeconds", KFH_waveCooldownNormalMinSeconds]) * _waveIntervalScale)];
+    missionNamespace setVariable ["KFH_waveCooldownNormalMaxSeconds", round ((missionNamespace getVariable ["KFH_waveCooldownNormalMaxSeconds", KFH_waveCooldownNormalMaxSeconds]) * _waveIntervalScale)];
+    missionNamespace setVariable ["KFH_waveCooldownRushMinSeconds", round ((missionNamespace getVariable ["KFH_waveCooldownRushMinSeconds", KFH_waveCooldownRushMinSeconds]) * _waveIntervalScale)];
+    missionNamespace setVariable ["KFH_waveCooldownRushMaxSeconds", round ((missionNamespace getVariable ["KFH_waveCooldownRushMaxSeconds", KFH_waveCooldownRushMaxSeconds]) * _waveIntervalScale)];
+
+    KFH_checkpointSpecialChance = (KFH_checkpointSpecialChance * _specialThreatScale) min 0.98;
+    KFH_checkpointSpecialMaxActive = ceil (KFH_checkpointSpecialMaxActive * _specialThreatScale);
+    KFH_pressureTickValue = round (KFH_pressureTickValue * _pressureScale);
+    KFH_reinforcePressure = round (KFH_reinforcePressure * _pressureScale);
+    KFH_extractPressureTickValue = round (KFH_extractPressureTickValue * _pressureScale);
+    KFH_extractReinforcePressure = round (KFH_extractReinforcePressure * _pressureScale);
+    KFH_activeEnemyHardCap = _hardCap;
+    KFH_standardGunnerChance = (KFH_standardGunnerChance * _armedScale) min 0.95;
+    KFH_rushGunnerChance = (KFH_rushGunnerChance * _armedScale) min 0.95;
+    KFH_standardHeavyChance = (KFH_standardHeavyChance * _armedScale) min 0.95;
+    KFH_rushHeavyChance = (KFH_rushHeavyChance * _armedScale) min 0.95;
+    missionNamespace setVariable ["KFH_enemyAimingAccuracy", ((missionNamespace getVariable ["KFH_enemyAimingAccuracy", 0.04]) * _enemySkillScale) min 0.95, true];
+    missionNamespace setVariable ["KFH_enemyAimingShake", ((missionNamespace getVariable ["KFH_enemyAimingShake", 0.18]) / _enemySkillScale) max 0.02, true];
+    missionNamespace setVariable ["KFH_enemyAimingSpeed", ((missionNamespace getVariable ["KFH_enemyAimingSpeed", 0.14]) * _enemySkillScale) min 0.95, true];
+    missionNamespace setVariable ["KFH_envMilitarySkillBase", ((missionNamespace getVariable ["KFH_envMilitarySkillBase", KFH_envMilitarySkillBase]) * _enemySkillScale) min 0.95, true];
+    missionNamespace setVariable ["KFH_envMilitarySkillRandom", ((missionNamespace getVariable ["KFH_envMilitarySkillRandom", KFH_envMilitarySkillRandom]) * _enemySkillScale) min 0.95, true];
+    missionNamespace setVariable ["KFH_envMilitaryAimingAccuracy", ((missionNamespace getVariable ["KFH_envMilitaryAimingAccuracy", KFH_envMilitaryAimingAccuracy]) * _enemySkillScale) min 0.95, true];
+    missionNamespace setVariable ["KFH_envMilitaryAimingShake", ((missionNamespace getVariable ["KFH_envMilitaryAimingShake", KFH_envMilitaryAimingShake]) / _enemySkillScale) max 0.02, true];
+    missionNamespace setVariable ["KFH_envMilitaryAimingSpeed", ((missionNamespace getVariable ["KFH_envMilitaryAimingSpeed", KFH_envMilitaryAimingSpeed]) * _enemySkillScale) min 0.95, true];
+    KFH_vehicleThreatEnabled = (["KFH_VehicleThreats", missionNamespace getVariable ["KFH_vehicleThreatParamDefault", 1]] call BIS_fnc_getParamValue) > 0;
+
+    [format ["Detailed difficulty params applied: enemySkill=%1 waveSize=%2 interval=%3 special=%4 pressure=%5 hardCap=%6 armed=%7 vehicleThreats=%8.", _enemySkillScale, _waveSizeScale, _waveIntervalScale, _specialThreatScale, _pressureScale, KFH_activeEnemyHardCap, _armedScale, KFH_vehicleThreatEnabled]] call KFH_fnc_log;
 };
 
 KFH_fnc_applyServerRouteParams = {
@@ -9253,6 +9661,12 @@ KFH_fnc_applyDifficultyPreset = {
 
 KFH_fnc_serverInit = {
     private _startMarker = "kfh_start";
+    private _optionalProbe = missionNamespace getVariable ["KFH_optionalContentWeaponProbe", "rhs_weap_m4a1"];
+    private _optionalAvailableOnServer = (missionNamespace getVariable ["KFH_cupOptionalEnabled", true]) &&
+        {isClass (configFile >> "CfgWeapons" >> _optionalProbe)};
+    missionNamespace setVariable ["KFH_optionalContentAvailableOnServer", _optionalAvailableOnServer, true];
+    [format ["Optional content on server: %1.", _optionalAvailableOnServer]] call KFH_fnc_log;
+
     private _checkpointMarkers = [] call KFH_fnc_getCheckpointMarkers;
     private _checkpointLimit = missionNamespace getVariable ["KFH_checkpointCount", count _checkpointMarkers];
     if ((count _checkpointMarkers) > _checkpointLimit) then {
@@ -9325,6 +9739,10 @@ KFH_fnc_serverInit = {
     [] call KFH_fnc_applyDifficultyPreset;
     [] call KFH_fnc_applyThreatScaleParam;
     [] call KFH_fnc_applyEnemyAccuracyPreset;
+    [] call KFH_fnc_applyEnvironmentParams;
+    [] call KFH_fnc_applyExtractionAndAreaParams;
+    [] call KFH_fnc_applyTrafficAndSpawnParams;
+    [] call KFH_fnc_applyDetailedDifficultyParams;
     ["start"] call KFH_fnc_playStoryBeatOnce;
     private _targetPlayers = [] call KFH_fnc_getMissionMaxPlayers;
     missionNamespace setVariable ["KFH_targetPlayers", _targetPlayers, true];
@@ -9359,6 +9777,7 @@ KFH_fnc_serverInit = {
     missionNamespace setVariable ["KFH_checkpointSupplyStates", _checkpointMarkers apply { _extractionTestMode }, true];
     missionNamespace setVariable ["KFH_activeEnemies", []];
     missionNamespace setVariable ["KFH_currentObjectiveEnemies", []];
+    missionNamespace setVariable ["KFH_currentWaveCheckpoint", 0, true];
     missionNamespace setVariable ["KFH_envTrafficGroups", []];
     missionNamespace setVariable ["KFH_ambientTrafficVehicles", [], true];
     missionNamespace setVariable ["KFH_holdStart", -1];
@@ -9618,6 +10037,32 @@ KFH_fnc_serverInit = {
 
             if ((count _playersNear) > 0) then {
                 [_checkpointIndex, _checkpointMarker, count _objectiveThreats] call KFH_fnc_startCheckpointDefenseEvent;
+            };
+
+            if (
+                ((count _playersNear) > 0) &&
+                {(count _objectiveThreats) isEqualTo 0} &&
+                {(missionNamespace getVariable ["KFH_currentWaveCheckpoint", 0]) isNotEqualTo _checkpointIndex}
+            ) then {
+                private _entrySeenKey = format ["KFH_checkpointEntrySeenAt_%1", _checkpointIndex];
+                private _entrySeenAt = missionNamespace getVariable [_entrySeenKey, -1];
+                if (_entrySeenAt < 0) then {
+                    _entrySeenAt = time;
+                    missionNamespace setVariable [_entrySeenKey, _entrySeenAt, true];
+                };
+                if ((time - _entrySeenAt) >= (missionNamespace getVariable ["KFH_checkpointEntryWaveGraceSeconds", 4])) then {
+                    [format ["Checkpoint %1 entry wave guarantee triggered after empty objective contact.", _checkpointIndex]] call KFH_fnc_log;
+                    [_checkpointIndex, 1, true] call KFH_fnc_spawnCheckpointWave;
+                    missionNamespace setVariable ["KFH_nextReinforceAt", time + _currentReinforceSeconds];
+                    missionNamespace setVariable ["KFH_nextWaveAt", time + _currentReinforceSeconds, true];
+                    _objectiveEnemies = [] call KFH_fnc_getCurrentObjectiveEnemies;
+                    _objectiveThreats = _objectiveEnemies select {
+                        alive _x && {(_x distance2D _checkpointPos) <= KFH_objectiveThreatRadius}
+                    };
+                    _currentWaveHostileCount = missionNamespace getVariable ["KFH_currentWaveHostileCount", count _objectiveThreats];
+                };
+            } else {
+                missionNamespace setVariable [format ["KFH_checkpointEntrySeenAt_%1", _checkpointIndex], -1, true];
             };
 
             if (
@@ -10192,12 +10637,11 @@ KFH_fnc_clientLoadoutTracker = {
 };
 
 KFH_fnc_getSpectatorTargets = {
-    private _targets = (([] call KFH_fnc_getHumanPlayers) + (units group player)) arrayIntersect (([] call KFH_fnc_getHumanPlayers) + (units group player));
+    private _source = ([] call KFH_fnc_getHumanPlayers) + (units group player);
+    private _targets = _source arrayIntersect _source;
 
     _targets select {
-        _x != player &&
-        alive _x &&
-        !([_x] call KFH_fnc_isIncapacitated)
+        alive _x
     }
 };
 
@@ -10263,16 +10707,89 @@ KFH_fnc_installDownedSpectatorInput = {
         false
     }];
     missionNamespace setVariable ["KFH_spectatorMouseEh", _handler];
+
+    private _moveHandler = _display displayAddEventHandler ["MouseMoving", {
+        params ["_display", "_x", "_y"];
+        if !(missionNamespace getVariable ["KFH_spectatorActive", false]) exitWith { false };
+
+        private _sensitivity = missionNamespace getVariable ["KFH_downedSpectatorMouseSensitivity", 7];
+        private _pitchScale = missionNamespace getVariable ["KFH_downedSpectatorMousePitchScale", 0.65];
+        private _deltaMax = missionNamespace getVariable ["KFH_downedSpectatorMouseDeltaMax", 0.025];
+        private _deadzone = missionNamespace getVariable ["KFH_downedSpectatorMouseDeadzone", 0.00035];
+        private _centerMode = missionNamespace getVariable ["KFH_downedSpectatorMouseCenterMode", true];
+        private _center = missionNamespace getVariable ["KFH_downedSpectatorMouseCenter", [0.5, 0.5]];
+        private _dx = 0;
+        private _dy = 0;
+
+        if (_centerMode && {(count _center) >= 2}) then {
+            _dx = _x - (_center select 0);
+            _dy = _y - (_center select 1);
+        } else {
+            private _last = missionNamespace getVariable ["KFH_spectatorMouseLast", []];
+            if ((count _last) < 2) exitWith {
+                missionNamespace setVariable ["KFH_spectatorMouseLast", [_x, _y]];
+                false
+            };
+            _dx = _x - (_last select 0);
+            _dy = _y - (_last select 1);
+        };
+
+        _dx = (_dx max -_deltaMax) min _deltaMax;
+        _dy = (_dy max -_deltaMax) min _deltaMax;
+        if ((abs _dx) < _deadzone) then { _dx = 0; };
+        if ((abs _dy) < _deadzone) then { _dy = 0; };
+        private _yaw = (missionNamespace getVariable ["KFH_spectatorYaw", getDirVisual player]) - (_dx * _sensitivity);
+        private _pitch = ((missionNamespace getVariable ["KFH_spectatorPitch", 12]) + (_dy * _sensitivity * _pitchScale)) max -35 min 50;
+
+        missionNamespace setVariable ["KFH_spectatorYaw", _yaw];
+        missionNamespace setVariable ["KFH_spectatorPitch", _pitch];
+        missionNamespace setVariable ["KFH_spectatorMouseLast", [_x, _y]];
+        if (_centerMode && {(count _center) >= 2} && {((abs _dx) + (abs _dy)) > 0}) then {
+            setMousePosition _center;
+            missionNamespace setVariable ["KFH_spectatorMouseLast", _center];
+        };
+        false
+    }];
+    missionNamespace setVariable ["KFH_spectatorMouseMoveEh", _moveHandler];
+
+    private _wheelHandler = _display displayAddEventHandler ["MouseZChanged", {
+        params ["_display", "_scroll"];
+        if !(missionNamespace getVariable ["KFH_spectatorActive", false]) exitWith { false };
+
+        private _distance = missionNamespace getVariable [
+            "KFH_spectatorDistance",
+            missionNamespace getVariable ["KFH_downedSpectatorDistance", 4.6]
+        ];
+        private _step = missionNamespace getVariable ["KFH_downedSpectatorZoomStep", 0.75];
+        private _min = missionNamespace getVariable ["KFH_downedSpectatorDistanceMin", 2.2];
+        private _max = missionNamespace getVariable ["KFH_downedSpectatorDistanceMax", 10];
+        _distance = (_distance - (_scroll * _step)) max _min min _max;
+        missionNamespace setVariable ["KFH_spectatorDistance", _distance];
+        true
+    }];
+    missionNamespace setVariable ["KFH_spectatorMouseWheelEh", _wheelHandler];
 };
 
 KFH_fnc_removeDownedSpectatorInput = {
     private _handler = missionNamespace getVariable ["KFH_spectatorMouseEh", -1];
-    if (_handler < 0) exitWith {};
     private _display = findDisplay 46;
     if !(isNull _display) then {
-        _display displayRemoveEventHandler ["MouseButtonDown", _handler];
+        if (_handler >= 0) then {
+            _display displayRemoveEventHandler ["MouseButtonDown", _handler];
+        };
+        private _moveHandler = missionNamespace getVariable ["KFH_spectatorMouseMoveEh", -1];
+        if (_moveHandler >= 0) then {
+            _display displayRemoveEventHandler ["MouseMoving", _moveHandler];
+        };
+        private _wheelHandler = missionNamespace getVariable ["KFH_spectatorMouseWheelEh", -1];
+        if (_wheelHandler >= 0) then {
+            _display displayRemoveEventHandler ["MouseZChanged", _wheelHandler];
+        };
     };
     missionNamespace setVariable ["KFH_spectatorMouseEh", -1];
+    missionNamespace setVariable ["KFH_spectatorMouseMoveEh", -1];
+    missionNamespace setVariable ["KFH_spectatorMouseWheelEh", -1];
+    missionNamespace setVariable ["KFH_spectatorMouseLast", []];
 };
 
 KFH_fnc_startDownedSpectator = {
@@ -10283,8 +10800,15 @@ KFH_fnc_startDownedSpectator = {
     showCinemaBorder false;
     missionNamespace setVariable ["KFH_spectatorCamera", _camera];
     missionNamespace setVariable ["KFH_spectatorActive", true];
+    missionNamespace setVariable ["KFH_spectatorYaw", getDirVisual player];
+    missionNamespace setVariable ["KFH_spectatorPitch", 12];
+    missionNamespace setVariable ["KFH_spectatorDistance", missionNamespace getVariable ["KFH_downedSpectatorDistance", 4.6]];
+    missionNamespace setVariable ["KFH_spectatorMouseLast", []];
+    if (missionNamespace getVariable ["KFH_downedSpectatorMouseCenterMode", true]) then {
+        setMousePosition (missionNamespace getVariable ["KFH_downedSpectatorMouseCenter", [0.5, 0.5]]);
+    };
     [] call KFH_fnc_installDownedSpectatorInput;
-    ["Downed spectator active. Camera will follow a living ally."] call KFH_fnc_localNotify;
+    ["Downed spectator active. Move mouse to look around; wheel zooms; click switches target."] call KFH_fnc_localNotify;
 };
 
 KFH_fnc_stopDownedSpectator = {
@@ -10300,6 +10824,7 @@ KFH_fnc_stopDownedSpectator = {
     missionNamespace setVariable ["KFH_spectatorCamera", objNull];
     missionNamespace setVariable ["KFH_spectatorTarget", objNull];
     missionNamespace setVariable ["KFH_spectatorActive", false];
+    missionNamespace setVariable ["KFH_spectatorMouseLast", []];
     [] call KFH_fnc_removeDownedSpectatorInput;
 };
 
@@ -10312,9 +10837,24 @@ KFH_fnc_updateDownedSpectator = {
 
     missionNamespace setVariable ["KFH_spectatorTarget", _target];
 
-    _camera camSetTarget _target;
-    _camera camSetPos (_target modelToWorldVisual [0, -4.2, 2.0]);
-    _camera camCommit 0;
+    private _yaw = missionNamespace getVariable ["KFH_spectatorYaw", getDirVisual _target];
+    private _pitch = missionNamespace getVariable ["KFH_spectatorPitch", 12];
+    private _distance = missionNamespace getVariable [
+        "KFH_spectatorDistance",
+        missionNamespace getVariable ["KFH_downedSpectatorDistance", 4.6]
+    ];
+    private _height = missionNamespace getVariable ["KFH_downedSpectatorHeight", 1.35];
+    private _focus = _target modelToWorldVisual [0, 0, _height];
+    private _horizontal = _distance * cos _pitch;
+    private _cameraPos = [
+        (_focus select 0) + (sin _yaw) * _horizontal,
+        (_focus select 1) + (cos _yaw) * _horizontal,
+        (_focus select 2) + (sin _pitch) * _distance
+    ];
+
+    _camera camSetTarget _focus;
+    _camera camSetPos _cameraPos;
+    _camera camCommit (missionNamespace getVariable ["KFH_downedSpectatorSmoothCommit", 0.08]);
 };
 
 KFH_fnc_downedSpectatorLoop = {
@@ -10332,36 +10872,73 @@ KFH_fnc_downedSpectatorLoop = {
             [] call KFH_fnc_stopDownedSpectator;
         };
 
-        sleep 0.2;
+        sleep (missionNamespace getVariable ["KFH_downedSpectatorUpdateSeconds", 0.05]);
     };
 };
 
 KFH_fnc_clientPlayerPositionMarkerLoop = {
     waitUntil { !isNull player };
 
-    private _markerName = format ["KFH_local_player_pos_%1", floor random 1000000];
-    private _marker = createMarkerLocal [_markerName, getPosATL player];
-    _marker setMarkerTypeLocal "mil_arrow2";
-    _marker setMarkerColorLocal "ColorBLUFOR";
-    _marker setMarkerTextLocal "YOU";
-    _marker setMarkerSizeLocal [0.75, 0.75];
+    private _markers = [];
 
     while { true } do {
         if ((missionNamespace getVariable ["KFH_phase", "boot"]) in ["complete", "failed"]) exitWith {};
 
         private _hasNavigation = ("ItemGPS" in assignedItems player) || {"ItemMap" in assignedItems player};
-        if ((missionNamespace getVariable ["KFH_playerPositionMarkerEnabled", true]) && {_hasNavigation} && {alive player}) then {
-            _marker setMarkerPosLocal (getPosATL player);
-            _marker setMarkerDirLocal (getDirVisual player);
-            _marker setMarkerAlphaLocal 1;
-        } else {
-            _marker setMarkerAlphaLocal 0;
+        private _humans = [] call KFH_fnc_getHumanPlayers;
+
+        {
+            _x params ["_unit", "_markerName"];
+            if (!(_unit in _humans)) then {
+                deleteMarkerLocal _markerName;
+                _markers set [_forEachIndex, objNull];
+            };
+        } forEach _markers;
+        _markers = _markers select { !(_x isEqualTo objNull) };
+
+        {
+            private _unit = _x;
+            private _entryIndex = _markers findIf { (_x select 0) isEqualTo _unit };
+            private _markerName = "";
+            if (_entryIndex < 0) then {
+                _markerName = format ["KFH_local_player_pos_%1_%2", owner _unit, floor random 1000000];
+                private _marker = createMarkerLocal [_markerName, getPosATL _unit];
+                _marker setMarkerTypeLocal "mil_arrow2";
+                _marker setMarkerSizeLocal [0.75, 0.75];
+                _markers pushBack [_unit, _markerName];
+            } else {
+                _markerName = (_markers select _entryIndex) select 1;
+            };
+
+            private _isSelf = _unit isEqualTo player;
+            _markerName setMarkerColorLocal (if (_isSelf) then { "ColorBLUFOR" } else { "ColorWEST" });
+            _markerName setMarkerTextLocal (if (_isSelf) then { "YOU" } else { name _unit });
+
+            if (
+                (missionNamespace getVariable ["KFH_playerPositionMarkerEnabled", true]) &&
+                {_hasNavigation} &&
+                {alive _unit}
+            ) then {
+                _markerName setMarkerPosLocal (getPosATL (vehicle _unit));
+                _markerName setMarkerDirLocal (getDirVisual (vehicle _unit));
+                _markerName setMarkerAlphaLocal 1;
+            } else {
+                _markerName setMarkerAlphaLocal 0;
+            };
+        } forEach _humans;
+
+        if !(_hasNavigation) then {
+            {
+                (_x select 1) setMarkerAlphaLocal 0;
+            } forEach _markers;
         };
 
         sleep 0.35;
     };
 
-    deleteMarkerLocal _marker;
+    {
+        deleteMarkerLocal (_x select 1);
+    } forEach _markers;
 };
 
 KFH_fnc_showTacticalPingLocal = {
@@ -10547,6 +11124,67 @@ KFH_fnc_getNearbyVehicleInjuredAlly = {
     ([_candidates, [], {_caller distance2D (vehicle _x)}, "ASCEND"] call BIS_fnc_sortBy) select 0
 };
 
+KFH_fnc_getNearbyReviveAlly = {
+    params ["_caller"];
+
+    if (isNull _caller) exitWith { objNull };
+
+    private _range = missionNamespace getVariable ["KFH_playerReviveActionDistance", 4];
+    private _near = nearestObjects [_caller, ["CAManBase"], _range];
+    private _candidates = _near select {
+        _x isNotEqualTo _caller &&
+        {alive _x} &&
+        {[_x] call KFH_fnc_isIncapacitated} &&
+        {((side group _x) isEqualTo (side group _caller)) || {_x getVariable ["KFH_debugTeammate", false]} || {_x getVariable ["KFH_soloWingman", false]}}
+    };
+
+    if ((count _candidates) isEqualTo 0) exitWith { objNull };
+
+    ([_candidates, [], {_x distance2D _caller}, "ASCEND"] call BIS_fnc_sortBy) select 0
+};
+
+KFH_fnc_reviveNearbyAllyLocal = {
+    params [["_caller", player]];
+
+    if (isNull _caller || {!alive _caller}) exitWith {};
+    if (_caller getVariable ["KFH_manualReviveBusy", false]) exitWith {};
+
+    private _casualty = [_caller] call KFH_fnc_getNearbyReviveAlly;
+    if (isNull _casualty) exitWith {
+        ["No downed ally close enough to revive."] call KFH_fnc_localNotify;
+    };
+    if ((vehicle _casualty) isNotEqualTo _casualty) exitWith {
+        ["Pull injured from vehicle first."] call KFH_fnc_localNotify;
+    };
+
+    _caller setVariable ["KFH_manualReviveBusy", true];
+    _caller playActionNow "MedicOther";
+    [_caller, _casualty] spawn {
+        params ["_caller", "_casualty"];
+
+        private _duration = missionNamespace getVariable ["KFH_playerReviveDuration", 4];
+        sleep _duration;
+
+        if (
+            !isNull _caller &&
+            {!isNull _casualty} &&
+            {alive _caller} &&
+            {alive _casualty} &&
+            {[_casualty] call KFH_fnc_isIncapacitated} &&
+            {(_caller distance2D _casualty) <= ((missionNamespace getVariable ["KFH_playerReviveActionDistance", 4]) + 0.75)}
+        ) then {
+            [_casualty] call KFH_fnc_reviveUnitFromDowned;
+            [format ["%1 revived %2.", name _caller, name _casualty]] remoteExecCall ["KFH_fnc_notifyAll", 2];
+        } else {
+            ["Revive interrupted."] call KFH_fnc_localNotify;
+        };
+
+        if (!isNull _caller) then {
+            _caller setVariable ["KFH_manualReviveBusy", false];
+        };
+    };
+};
+
 KFH_fnc_pullNearbyVehicleInjuredLocal = {
     params [["_caller", player]];
 
@@ -10555,6 +11193,7 @@ KFH_fnc_pullNearbyVehicleInjuredLocal = {
         ["No injured ally inside a nearby vehicle."] call KFH_fnc_localNotify;
     };
 
+    _caller playActionNow (missionNamespace getVariable ["KFH_vehicleCasualtyPullAnimation", "MedicOther"]);
     [_casualty, _caller, "manual pull injured"] call KFH_fnc_extractCasualtyFromVehicle;
     ["Injured ally pulled clear. Drag or revive once safe."] call KFH_fnc_localNotify;
 };
@@ -10566,15 +11205,58 @@ KFH_fnc_dropDraggedBodyLocal = {
     if (isNull _body) exitWith {};
 
     detach _body;
-    _body setPosATL (_caller modelToWorld [0, 1.25, 0]);
+    _body setPosATL (_caller modelToWorld (missionNamespace getVariable ["KFH_bodyDragDropOffset", [0, -1.15, 0]]));
     _body setVariable ["KFH_draggedBodyBusy", false, true];
+    _body setVariable ["KFH_draggedBy", objNull, true];
+    _body setVariable ["KFH_dragPoseRefreshActive", false, true];
     _caller setVariable ["KFH_draggedBody", objNull];
+    _caller forceWalk false;
+    _caller setAnimSpeedCoef (missionNamespace getVariable ["KFH_playerAnimSpeedCoef", 1]);
 
     if (alive _body) then {
         _body enableAI "MOVE";
+        [_body] remoteExecCall ["KFH_fnc_applyDownedWaitPoseLocal", 0];
     };
 
     ["Body dropped."] call KFH_fnc_localNotify;
+};
+
+KFH_fnc_applyDraggedBodyPoseLocal = {
+    params ["_body"];
+
+    if (isNull _body) exitWith {};
+    if !(alive _body) exitWith {};
+    if !(_body getVariable ["KFH_draggedBodyBusy", false]) exitWith {};
+
+    private _anim = missionNamespace getVariable ["KFH_bodyDragAnimation", "AinjPpneMstpSnonWrflDnon"];
+    _body setUnitPos "DOWN";
+    _body switchMove _anim;
+};
+
+KFH_fnc_startDraggedBodyPoseRefresh = {
+    params ["_body"];
+
+    if (isNull _body) exitWith {};
+    if (_body getVariable ["KFH_dragPoseRefreshActive", false]) exitWith {};
+
+    _body setVariable ["KFH_dragPoseRefreshActive", true, true];
+    [_body] spawn {
+        params ["_trackedBody"];
+
+        private _interval = missionNamespace getVariable ["KFH_bodyDragPoseRefreshSeconds", 0.8];
+        while {
+            !isNull _trackedBody &&
+            {alive _trackedBody} &&
+            {_trackedBody getVariable ["KFH_draggedBodyBusy", false]}
+        } do {
+            [_trackedBody] remoteExecCall ["KFH_fnc_applyDraggedBodyPoseLocal", 0];
+            sleep _interval;
+        };
+
+        if (!isNull _trackedBody) then {
+            _trackedBody setVariable ["KFH_dragPoseRefreshActive", false, true];
+        };
+    };
 };
 
 KFH_fnc_startDraggingBodyLocal = {
@@ -10589,14 +11271,19 @@ KFH_fnc_startDraggingBodyLocal = {
     };
 
     _body setVariable ["KFH_draggedBodyBusy", true, true];
+    _body setVariable ["KFH_draggedBy", _caller, true];
     _caller setVariable ["KFH_draggedBody", _body];
+    _caller forceWalk true;
+    _caller setAnimSpeedCoef (missionNamespace getVariable ["KFH_bodyDragCarrierAnimSpeedCoef", 0.55]);
 
     if (alive _body) then {
         _body disableAI "MOVE";
     };
 
-    _body attachTo [_caller, missionNamespace getVariable ["KFH_bodyDragAttachOffset", [0, 1.15, 0.05]]];
-    _body setDir 180;
+    _body attachTo [_caller, missionNamespace getVariable ["KFH_bodyDragAttachOffset", [0, -1.25, 0.05]]];
+    _body setDir (missionNamespace getVariable ["KFH_bodyDragAttachDir", 0]);
+    [_body] call KFH_fnc_startDraggedBodyPoseRefresh;
+    [_body] remoteExecCall ["KFH_fnc_applyDraggedBodyPoseLocal", 0];
     ["Dragging ally body. Use Drop body when safe."] call KFH_fnc_localNotify;
 };
 
@@ -10625,26 +11312,27 @@ KFH_fnc_installPlayerCombatActions = {
         player setVariable ["KFH_vehicleFlipActionId", _flipActionId];
     };
 
-    if (isNil { player getVariable "KFH_quickStrikeActionId" }) then {
-        private _actionId = player addAction [
-            "Quick Strike",
+    if (isNil { player getVariable "KFH_reviveAllyActionId" }) then {
+        private _reviveActionId = player addAction [
+            "<t color='#ff4444'>Revive ally</t>",
             {
-                [] call KFH_fnc_playerQuickStrike;
+                params ["_target", "_caller"];
+                [_caller] call KFH_fnc_reviveNearbyAllyLocal;
             },
             nil,
-            1.6,
+            1.9,
             false,
             true,
             "",
-            "alive _this && (_this distance _target) < 1.5"
+            "alive _this && {!([_this] call KFH_fnc_isIncapacitated)} && {!(_this getVariable ['KFH_manualReviveBusy', false])} && {!isNull ([_this] call KFH_fnc_getNearbyReviveAlly)}"
         ];
 
-        player setVariable ["KFH_quickStrikeActionId", _actionId];
+        player setVariable ["KFH_reviveAllyActionId", _reviveActionId];
     };
 
     if (isNil { player getVariable "KFH_pullVehicleInjuredActionId" }) then {
         private _pullActionId = player addAction [
-            "Pull injured from vehicle",
+            "<t color='#ff4444'>Pull injured from vehicle</t>",
             {
                 params ["_target", "_caller"];
                 [_caller] call KFH_fnc_pullNearbyVehicleInjuredLocal;
