@@ -1,10 +1,11 @@
 KFH_targetPlayers = 12;
-KFH_difficultyParamDefault = 1;
+KFH_difficultyParamDefault = 0;
 KFH_difficultyNames = ["easy", "normal", "hard", "veryHard"];
 KFH_enemyAccuracyParamDefault = 1;
 KFH_enemyAccuracyNames = ["veryLow", "low", "normal", "high", "veryHigh"];
 KFH_routeScaleParamDefault = 100;
-KFH_checkpointCountParamDefault = 6;
+KFH_checkpointCountParamDefault = 4;
+KFH_holdSecondsParamDefault = 60;
 KFH_threatScaleParamDefault = 100;
 KFH_threatScaleMultiplier = 1;
 KFH_fogDensityParamDefault = 0;
@@ -34,14 +35,11 @@ KFH_roadblockCountParamDefault = 100;
 KFH_enemySpawnDistanceParamDefault = 0;
 KFH_villagePatrolSpawnsParamDefault = 100;
 KFH_civilianSuicideBombFrequencyParamDefault = 8;
-KFH_announcementLanguageDefault = 0;
+KFH_announcementLanguageDefault = 1;
 KFH_friendlyFireScale = 0.01;
 KFH_captureRadius = 25;
 KFH_enemyClearRadius = 65;
-KFH_holdSeconds = 20;
-KFH_captureAllowPartialClear = true;
-KFH_captureClearRemainingRatio = 0.34;
-KFH_captureWavePauseSeconds = 100;
+KFH_holdSeconds = 60;
 KFH_checkpointSupplyDelay = 30;
 KFH_extractHoldSeconds = 15;
 KFH_extractBoardTimeoutSeconds = 60;
@@ -398,7 +396,7 @@ KFH_envMilitaryCheckpointGuardMin = 4;
 KFH_envMilitaryCheckpointGuardMax = 6;
 KFH_envMilitarySpawnTargetGraceSeconds = 5;
 KFH_envMilitaryCheckpointObjects = [
-    ["Land_BarGate_F", [0, 0, 0], 0],
+    ["Land_BarGate_F", [0, 0, 0], 45],
     ["Land_CncBarrierMedium_F", [4.5, 0.8, 0], 90],
     ["Land_CncBarrierMedium_F", [-4.5, -0.8, 0], 270],
     ["RoadCone_F", [8, 3.8, 0], 0],
@@ -416,6 +414,14 @@ KFH_startPatrolVehiclePerPlayers = 2;
 KFH_startPatrolVehicleGraceSeconds = 8;
 KFH_startPatrolVehicleSpeedBoost = 1.25;
 KFH_startPatrolVehicleBoostMaxKmh = 60;
+KFH_startPatrolVehicleDamageScale = 0.08;
+KFH_startPatrolVehicleHitPointDamageScale = 0.05;
+KFH_startPatrolVehicleDamageSoftCap = 0.22;
+KFH_startPatrolVehicleHitPointSoftCap = 0.18;
+KFH_startPatrolVehicleAutoRepairSeconds = 2.5;
+KFH_startPatrolVehicleAutoRepairMaxDamage = 0.28;
+KFH_startPatrolVehicleAutoRepairHitPointCap = 0.12;
+KFH_startAssetDirCorrection = 180;
 KFH_vehicleFlipEnabled = true;
 KFH_vehicleFlipDistance = 7;
 KFH_vehicleFlipMaxSpeed = 2;
@@ -429,10 +435,11 @@ KFH_vehicleThreatPressureByTier = [
     ["armor", 6],
     ["combat", 9]
 ];
+KFH_checkpointAssetDirCorrection = 90;
 KFH_checkpointDressingOffsets = [
     ["Land_MetalBarrel_F", [2, 4, 0], 0, 0, false],
     ["Land_MetalBarrel_F", [2, -5, 0], 0, 0, false],
-    ["Land_BarGate_F", [0, 0, 0], 0, 0.25, false],
+    ["Land_BarGate_F", [0, 0, 0], 45, 0.25, false],
     ["Land_CncBarrier_stripes_F", [7, 4, 0], 30, 0.2, false],
     ["Land_Wreck_Car_F", [-11, -5, 0], -25, 0.65, false]
 ];
@@ -447,7 +454,7 @@ KFH_checkpointDressingSets = [
     [
         ["Land_MetalBarrel_F", [2, 4, 0], 0, 0, false],
         ["Land_MetalBarrel_F", [2, -5, 0], 0, 0, false],
-        ["Land_BarGate_F", [0, 0, 0], 0, 0.25, false],
+        ["Land_BarGate_F", [0, 0, 0], 45, 0.25, false],
         ["Land_CncBarrier_stripes_F", [7, 4, 0], 30, 0.2, false],
         ["Land_Wreck_Car_F", [-11, -5, 0], -25, 0.65, false]
     ],
@@ -520,6 +527,41 @@ KFH_spawnAheadAttempts = 16;
 KFH_spawnAheadBlockerRadius = 7;
 KFH_spawnMinPlayerDistance = 85;
 KFH_spawnMinRespawnDistance = 75;
+KFH_wavePlayerEngagementDistance = 180;
+KFH_wavePlayerFallbackEngagementDistance = 1000;
+KFH_waveSpawnLaneEnabled = true;
+KFH_waveSpawnLaneMinDistance = 58;
+KFH_waveSpawnLaneMaxDistance = 105;
+KFH_waveSpawnLaneCloseMinDistance = 42;
+KFH_waveSpawnLaneCheckpointPadding = 24;
+KFH_waveSpawnLaneConeDegrees = 22;
+KFH_waveSpawnLaneAttempts = 18;
+KFH_waveSpawnLaneMinPlayerDistance = 42;
+KFH_waveSpawnPreferHidden = true;
+KFH_waveSpawnVisibleRejectDistance = 145;
+KFH_waveSpawnVisibleRejectConeDegrees = 58;
+KFH_waveSpawnClusterEnabled = true;
+KFH_waveSpawnClusterSize = 4;
+KFH_waveSpawnMaxClusters = 3;
+KFH_waveSpawnClusterRadius = 7;
+KFH_waveSpawnClusterSafeRadius = 5;
+KFH_spawnRelaxedMinPlayerDistance = 55;
+KFH_spawnRelaxedMinRespawnDistance = 45;
+KFH_spawnRelaxedBlockerRadius = 2;
+KFH_spawnFallbackNearMinDistance = 50;
+KFH_spawnFallbackNearMaxDistance = 95;
+KFH_spawnFallbackRoadSearchRadius = 180;
+KFH_spawnFallbackRoadMinDistance = 55;
+KFH_spawnFallbackPerimeterMinDistance = 70;
+KFH_spawnFallbackPerimeterMaxDistance = 135;
+KFH_spawnForcedMinPlayerDistance = 35;
+KFH_spawnForcedMinRespawnDistance = 30;
+KFH_checkpointStallRescueEnabled = true;
+KFH_checkpointStallRescueSeconds = 5;
+KFH_checkpointStallRescueCount = 4;
+KFH_checkpointStallFarDistance = 140;
+KFH_checkpointStallInvisibleDistance = 95;
+KFH_checkpointNudgeHumanTargetDistance = 260;
 KFH_initialWaveReadyTimeout = 20;
 KFH_initialWaveReadyBuffer = 3;
 KFH_objectiveThreatRadius = 90;
@@ -528,7 +570,7 @@ KFH_showCheckpointStatusChat = false;
 KFH_showStartupDebugChat = false;
 KFH_rightHudEnabled = false;
 KFH_rightHudUpdateSeconds = 0.5;
-KFH_activeEnemyHardCap = 50;
+KFH_activeEnemyHardCap = 70;
 KFH_spawnCapWarningCooldown = 20;
 KFH_enemyClasses = [
     "O_Soldier_F",
@@ -536,14 +578,26 @@ KFH_enemyClasses = [
     "O_G_Soldier_F"
 ];
 KFH_useWebKnightZombies = true;
-KFH_webKnightZombieTypes = [4, 5, 5, 4];
-KFH_webKnightZombieMaxActive = 45;
+KFH_externalZombieMeleeFallbackEnabled = false;
+KFH_enemyDirectorUseWebKnightForCommon = true;
+KFH_enemyDirectorUseWebKnightForHeavy = true;
+KFH_enemyDirectorFallbackMeleeEnabled = false;
+KFH_webKnightZombieTypes = [1, 2, 3, 4, 5, 5];
+KFH_webKnightZombieMaxActive = 70;
 KFH_webKnightInitDelay = 0.25;
+KFH_webKnightCommonInitTimeout = 2.5;
+KFH_webKnightCommonInitRetries = 1;
+KFH_webKnightReplacementMaxAttempts = 3;
+KFH_webKnightReplacementMinDistance = 34;
+KFH_webKnightReplacementMaxDistance = 75;
+KFH_webKnightReplaceExternalOnStall = true;
+KFH_webKnightNativeSpecialInitDelay = 0.45;
+KFH_webKnightNativeSpecialInitTimeout = 2;
 KFH_meleeAttackRange = 1.25;
 KFH_meleeAttackDamage = 0.18;
 KFH_meleeAttackCooldown = 1.1;
-KFH_meleeRetargetSeconds = 0.45;
-KFH_meleeCommandMoveSeconds = 1.1;
+KFH_meleeRetargetSeconds = 0.25;
+KFH_meleeCommandMoveSeconds = 0.55;
 KFH_meleeWalkDistance = 7;
 KFH_meleeFaceDistance = 3.5;
 KFH_meleeRunAnimSpeed = 0.96;
@@ -555,6 +609,7 @@ KFH_meleeStuckRepathOffset = 0.8;
 KFH_meleeForcedDestinationSeconds = 0.8;
 KFH_meleeCueDistance = 22;
 KFH_meleeCueCooldown = 2.8;
+KFH_zombieCueEnabled = false;
 KFH_zombieCueVolume = 3.4;
 KFH_zombieCuePitchBase = 0.72;
 KFH_zombieCuePitchRandom = 0.05;
@@ -585,14 +640,21 @@ KFH_debugTeammateSkill = 0.92;
 KFH_debugTeammateAimingAccuracy = 0.46;
 KFH_debugTeammateDamageScale = 0.42;
 KFH_debugTeammateEngageRadius = 190;
-KFH_debugTeammateRespawnDelay = 20;
-KFH_debugTeammateRescueRespawnDelay = 3;
+KFH_debugTeammateCombatProfileRefreshSeconds = 25;
+KFH_debugTeammateRespawnDelay = 45;
+KFH_debugTeammateRescueRespawnDelay = 18;
 KFH_debugTeammateReviveRange = 4;
-KFH_debugTeammateReviveTimeout = 5;
+KFH_debugTeammateReviveTimeout = 24;
 KFH_debugTeammateReviveDuration = 1.8;
+KFH_debugTeammateReviveStartDelay = 2.5;
+KFH_aiReviveTargetBusyTimeout = 8;
 KFH_playerReviveActionDistance = 4;
 KFH_playerReviveDuration = 4;
-KFH_debugTeammateRescueTeleportDelay = 0.35;
+KFH_debugTeammateDownedProtectionEnabled = true;
+KFH_debugTeammateRescueTeleportEnabled = true;
+KFH_debugTeammateRescueTeleportDelay = 3;
+KFH_debugTeammateFollowCommandDistance = 35;
+KFH_debugTeammateFollowTeleportDistance = 100;
 KFH_debugTeammateAutoPullVehicleCasualties = true;
 KFH_debugTeammateLastStandGraceSeconds = 90;
 KFH_debugTeammateWipeGraceSeconds = 35;
@@ -604,6 +666,8 @@ KFH_scalingTestAllyMirrorInterval = 18;
 KFH_playerDeathWipeGraceSeconds = 55;
 KFH_playerDownedAnnouncementMinInterval = 8;
 KFH_playerDownedProtectionEnabled = true;
+KFH_playerHealthMultiplier = 1;
+KFH_playerDamageTakenScale = 1;
 KFH_forcedDownedDamage = 0.42;
 KFH_downedWaitAnimation = "AinjPpneMstpSnonWrflDnon";
 KFH_downedPoseRefreshSeconds = 1.2;
@@ -611,6 +675,13 @@ KFH_downedInterceptDamageThreshold = 0.72;
 KFH_downedInterceptTotalDamageThreshold = 0.82;
 KFH_respawnFallbackDownedEnabled = true;
 KFH_revivedDamage = 0.35;
+KFH_bloaterBlastDamageBridgeEnabled = true;
+KFH_bloaterBlastDamageRadius = 6;
+KFH_bloaterBlastVehicleCrewRadius = 9;
+KFH_bloaterBlastDamageMax = 0.55;
+KFH_bloaterBlastVehicleCrewDamageMax = 0.65;
+KFH_bloaterBlastDamageMin = 0.12;
+KFH_bloaterBlastWatchInterval = 0.15;
 KFH_postReviveBlurSeconds = 0;
 KFH_postReviveBlurClearDamage = 0.25;
 KFH_reviveCleanupSeconds = 1.2;
@@ -622,19 +693,21 @@ KFH_reviveGetUpAnimationUnarmed = "AmovPpneMstpSnonWnonDnon_AmovPercMstpSnonWnon
 KFH_reviveGetUpAnimationProneUnarmed = "AmovPpneMstpSnonWnonDnon";
 KFH_reviveGetUpAnimationSeconds = 3.6;
 KFH_reviveGetUpAnimationSpeedCoef = 0.55;
-KFH_downedSpectatorDistance = 4.6;
-KFH_downedSpectatorDistanceMin = 2.2;
-KFH_downedSpectatorDistanceMax = 10;
+KFH_downedSpectatorDistance = 8;
+KFH_downedSpectatorDistanceMin = 2;
+KFH_downedSpectatorDistanceMax = 25;
 KFH_downedSpectatorZoomStep = 0.75;
 KFH_downedSpectatorHeight = 1.35;
-KFH_downedSpectatorMouseSensitivity = 220;
-KFH_downedSpectatorMousePitchScale = 0.55;
-KFH_downedSpectatorMouseDeltaMax = 0.08;
-KFH_downedSpectatorMouseDeadzone = 0.00008;
-KFH_downedSpectatorMouseCenterMode = true;
+KFH_downedSpectatorMouseSensitivity = 0.6;
+KFH_downedSpectatorMousePitchScale = 0.5;
+KFH_downedSpectatorMouseDeltaMax = 8;
+KFH_downedSpectatorMouseDeadzone = 0.001;
+KFH_downedSpectatorMouseCenterMode = false;
 KFH_downedSpectatorMouseCenter = [0.5, 0.5];
-KFH_downedSpectatorSmoothCommit = 0.02;
-KFH_downedSpectatorUpdateSeconds = 0.02;
+KFH_downedSpectatorPitchMin = 5;
+KFH_downedSpectatorPitchMax = 85;
+KFH_downedSpectatorSmoothCommit = 0;
+KFH_downedSpectatorUpdateSeconds = 0.016;
 KFH_vehicleCasualtyPullEnabled = true;
 KFH_vehicleCasualtyPullActionDistance = 8;
 KFH_vehicleCasualtyPullSafeDistance = 1.0;
@@ -650,12 +723,17 @@ KFH_debugEdenStartArsenalEnabled = true;
 KFH_debugEdenStartArsenalOffset = [-5, -6, 0];
 KFH_bodyDragEnabled = true;
 KFH_bodyDragDistance = 3.2;
-KFH_bodyDragAttachOffset = [0, -1.05, 0.05];
+KFH_bodyDragAttachOffset = [0, 1.1, 0.092];
 KFH_bodyDragDropOffset = [0, -1.15, 0];
-KFH_bodyDragAttachDir = 0;
+KFH_bodyDragAttachDir = 180;
 KFH_bodyDragAnimation = "AinjPpneMstpSnonWrflDnon";
 KFH_bodyDragPoseRefreshSeconds = 0.8;
 KFH_bodyDragCarrierAnimSpeedCoef = 0.55;
+KFH_bodyDragGroundSearchRadius = 4;
+KFH_bodyDragGroundSearchStep = 0.8;
+KFH_bodyDragGroundZOffset = 0.05;
+KFH_reviveActionDiagEnabled = true;
+KFH_reviveActionDiagInterval = 6;
 KFH_starterUniforms = [
     "U_B_CombatUniform_mcam_tshirt",
     "U_I_CombatUniform",
@@ -718,6 +796,7 @@ KFH_repairStationClass = "Box_NATO_AmmoVeh_F";
 KFH_supportAmmoOffset = [8, -4, 0];
 KFH_supportMedicalOffset = [11, -1, 0];
 KFH_supportRepairOffset = [15, 4, 0];
+KFH_checkpointSupplyCrateClass = "Box_NATO_AmmoVeh_F";
 KFH_checkpointAmmoOffset = [5, -3, 0];
 KFH_checkpointMedicalOffset = [8, -1, 0];
 KFH_checkpointBeaconOffsets = [
@@ -851,6 +930,8 @@ KFH_checkpointSpecialRushChanceBonus = 0.18;
 KFH_checkpointSpecialMaxActive = 13;
 KFH_checkpointSpecialMinDistance = 42;
 KFH_checkpointSpecialMaxDistance = 110;
+KFH_checkpointJuggernautStartProgress = 0.85;
+KFH_checkpointJuggernautChance = 0.16;
 KFH_screamerSpawnDistanceMin = 150;
 KFH_screamerSpawnDistanceMax = 260;
 KFH_knownBrokenSpecialClasses = [
@@ -863,12 +944,16 @@ KFH_knownBrokenSpecialClasses = [
     "Zombie_Special_GREENFOR_Leaper_1",
     "Zombie_Special_GREENFOR_Leaper_2"
 ];
-KFH_leaperProxyEnabled = true;
-KFH_leaperProxyCrawlEnabled = true;
-KFH_leaperProxyUnitPos = "MIDDLE";
+KFH_bannedSpecialClassSubstrings = [
+    "acid",
+    "poison"
+];
+KFH_leaperProxyEnabled = false;
+KFH_leaperProxyCrawlEnabled = false;
+KFH_leaperProxyUnitPos = "UP";
 KFH_leaperProxyDamageScale = 1.1;
-KFH_leaperProxyAnimSpeed = 1;
-KFH_leaperProxyRetargetSeconds = 0.35;
+KFH_leaperProxyAnimSpeed = 1.12;
+KFH_leaperProxyRetargetSeconds = 0.18;
 KFH_leaperProxyPounceMinDistance = 5.5;
 KFH_leaperProxyPounceMaxDistance = 11;
 KFH_leaperProxyPounceCooldown = 7.5;
@@ -880,19 +965,18 @@ KFH_leaperProxyHumanAnchorMinDistance = 65;
 KFH_leaperProxyHumanAnchorMaxDistance = 135;
 KFH_checkpointBloaterPerWaveEnabled = true;
 KFH_checkpointBloaterPerWaveIgnoreBudget = true;
+KFH_checkpointBloaterPerWaveChance = 0.45;
 KFH_checkpointSpecialWaveRampCycle = 10;
 KFH_checkpointSpecialRampExtraChanceMax = 0.65;
-KFH_checkpointSpecialRampExtraMax = 1;
+KFH_checkpointSpecialRampExtraMax = 2;
 KFH_checkpointSpecialRoles = [
-    ["screamer", ["Zombie_Special_OPFOR_Screamer"], 5],
-    ["leaper", [""], 5],
-    ["bloater", ["Zombie_Special_OPFOR_Boomer"], 16],
-    ["goliath", ["WBK_Goliaph_1", "WBK_Goliaph_2", "WBK_Goliaph_3"], 1],
-    ["smasher", ["WBK_SpecialZombie_Smasher_1", "WBK_SpecialZombie_Smasher_2", "WBK_SpecialZombie_Smasher_3", "WBK_SpecialZombie_Smasher_Acid_1", "WBK_SpecialZombie_Smasher_Acid_2", "WBK_SpecialZombie_Smasher_Acid_3", "WBK_SpecialZombie_Smasher_Hellbeast_1", "WBK_SpecialZombie_Smasher_Hellbeast_2", "WBK_SpecialZombie_Smasher_Hellbeast_3"], 1]
+    ["screamer", ["Zombie_Special_OPFOR_Screamer"], 10],
+    ["bloater", ["Zombie_Special_OPFOR_Boomer"], 7],
+    ["goliath", ["WBK_Goliaph_1", "WBK_Goliaph_2", "WBK_Goliaph_3"], 2],
+    ["smasher", ["WBK_SpecialZombie_Smasher_1", "WBK_SpecialZombie_Smasher_2", "WBK_SpecialZombie_Smasher_3", "WBK_SpecialZombie_Smasher_Hellbeast_1", "WBK_SpecialZombie_Smasher_Hellbeast_2", "WBK_SpecialZombie_Smasher_Hellbeast_3"], 2]
 ];
 KFH_checkpointSpecialRampRoles = [
-    ["screamer", ["Zombie_Special_OPFOR_Screamer"], 5],
-    ["leaper", [""], 5],
+    ["screamer", ["Zombie_Special_OPFOR_Screamer"], 8],
     ["bloater", ["Zombie_Special_OPFOR_Boomer"], 4]
 ];
 KFH_wildSpecialEnabled = true;
@@ -905,24 +989,27 @@ KFH_wildSpecialAllowRouteFallback = false;
 KFH_wildSpecialMinDistance = 130;
 KFH_wildSpecialMaxDistance = 280;
 KFH_wildSpecialRoles = [
-    ["leaper", [""], 6],
-    ["screamer", ["Zombie_Special_OPFOR_Screamer"], 3],
-    ["bloater", ["Zombie_Special_OPFOR_Boomer"], 12]
+    ["screamer", ["Zombie_Special_OPFOR_Screamer"], 8],
+    ["bloater", ["Zombie_Special_OPFOR_Boomer"], 6]
 ];
 KFH_extractionHeliCallDelaySeconds = 200;
 KFH_extractionFinaleRushEnabled = true;
-KFH_extractionFinaleSpecialIntervalSeconds = 30;
-KFH_extractionFinaleSpecialPairChance = 0.35;
-KFH_extractionFinaleSpecialMinDistance = 90;
-KFH_extractionFinaleSpecialMaxDistance = 185;
-KFH_extractionFinaleScreamerMinDistance = 170;
-KFH_extractionFinaleScreamerMaxDistance = 300;
-KFH_extractionFinaleJuggernautMinDistance = 230;
-KFH_extractionFinaleJuggernautMaxDistance = 360;
+KFH_extractionFinaleSpecialIntervalSeconds = 18;
+KFH_extractionFinaleSpecialPairChance = 0.7;
+KFH_extractionFinaleSpecialMinDistance = 75;
+KFH_extractionFinaleSpecialMaxDistance = 155;
+KFH_extractionFinaleScreamerMinDistance = 120;
+KFH_extractionFinaleScreamerMaxDistance = 230;
+KFH_extractionFinaleJuggernautMinDistance = 135;
+KFH_extractionFinaleJuggernautMaxDistance = 240;
+KFH_extractionFinaleJuggernautCount = 2;
+KFH_extractWaveSpawnAtLz = true;
+KFH_extractWaveIgnoreActiveCap = true;
 KFH_extractionFinaleSpecialRoles = [
     ["screamer", ["Zombie_Special_OPFOR_Screamer"], 1],
-    ["leaper", [""], 1],
-    ["bloater", ["Zombie_Special_OPFOR_Boomer"], 4]
+    ["bloater", ["Zombie_Special_OPFOR_Boomer"], 1],
+    ["screamer", ["Zombie_Special_OPFOR_Screamer"], 1],
+    ["bloater", ["Zombie_Special_OPFOR_Boomer"], 1]
 ];
 KFH_extractionFinaleJuggernautRoles = [
     ["goliath", ["WBK_Goliaph_1", "WBK_Goliaph_2", "WBK_Goliaph_3"], 1],
@@ -1164,6 +1251,7 @@ KFH_staleEnemyObjectiveGraceDistance = 360;
 KFH_staleEnemyRelocateMaxObjectiveDistance = 260;
 KFH_staleEnemyRelocateCoverTypes = ["TREE", "SMALL TREE", "BUSH", "ROCK", "ROCKS", "HOUSE", "BUILDING", "WALL", "FENCE", "HIDE"];
 KFH_staleEnemyVisibleThreshold = 0.25;
+KFH_checkpointSecureKeepAliveDistance = 320;
 KFH_rushDebtEnabled = true;
 KFH_rushDebtMax = 24;
 KFH_rushDebtInterestEnabled = true;
@@ -1177,6 +1265,15 @@ KFH_waveRecycleHumanDistance = 260;
 KFH_tacticalPingLifetime = 45;
 KFH_tacticalPingMarkerColor = "ColorOrange";
 KFH_playerPositionMarkerEnabled = true;
+KFH_teammateWorldMarkerEnabled = true;
+KFH_teammateWorldMarkerMaxDistance = 900;
+KFH_teammateWorldMarkerIcon = "\A3\ui_f\data\map\markers\military\dot_CA.paa";
+KFH_teammateWorldMarkerSize = 0.38;
+KFH_teammateWorldMarkerTextSize = 0.035;
+KFH_teammateWorldMarkerHeight = 0.35;
+KFH_teammateWorldMarkerVehicleHeight = 2.7;
+KFH_teammateWorldMarkerColor = [0.25, 0.65, 1, 0.86];
+KFH_teammateWorldMarkerDownedColor = [1, 0.18, 0.12, 1];
 KFH_loadoutTrackSeconds = 6;
 KFH_supportDecor = [
     ["Land_HBarrier_3_F", [3, -8, 0], 180],

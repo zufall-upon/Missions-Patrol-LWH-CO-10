@@ -30,7 +30,7 @@ binarizationWanted=0;
 sourceName="kfh_patrol_lwh_co10";
 addons[]=
 {
-	"A3_Characters_F",
+	"A3_Characters_F_BLUFOR",
 	"A3_Ui_F"
 };
 class AddonsMetaData
@@ -40,8 +40,8 @@ class AddonsMetaData
 		items=2;
 		class Item0
 		{
-			className="A3_Characters_F";
-			name="Arma 3 Alpha - Characters and Clothing";
+			className="A3_Characters_F_BLUFOR";
+			name="Arma 3 - Characters and Clothing - BLUFOR";
 			author="Bohemia Interactive";
 			url="https://www.arma3.com";
 		};

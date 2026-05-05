@@ -43,14 +43,7 @@ if (!hasInterface) exitWith {};
         missionNamespace setVariable ["KFH_respawnAsDownedVehicle", objNull];
         missionNamespace setVariable ["KFH_respawnAsDownedWasVehicle", false];
         missionNamespace setVariable ["KFH_lastHumanCasualtyAt", time, true];
-        _unit setVariable ["KFH_forcedDowned", false, true];
-        if (_restoreAsDowned) then {
-            _unit allowDamage false;
-        } else {
-            _unit allowDamage true;
-        };
-        _unit setCaptive false;
-        _unit setUnconscious false;
+        [_unit, !_restoreAsDowned] call KFH_fnc_clearDownedState;
         [_unit, _corpse, _restoreAsDowned, _downedPos, _downedDir, _downedVehicle, _wasVehicleCasualty] spawn {
             params ["_unit", "_corpse", "_restoreAsDowned", "_downedPos", "_downedDir", "_downedVehicle", "_wasVehicleCasualty"];
             sleep 0.05;
@@ -117,7 +110,9 @@ if (missionNamespace getVariable ["KFH_rightHudEnabled", false]) then {
 [] spawn KFH_fnc_clientLoadoutTracker;
 [] spawn KFH_fnc_downedSpectatorLoop;
 [] spawn KFH_fnc_clientStaminaAssistLoop;
+[] spawn KFH_fnc_clientPlayerPresenceLoop;
 [] spawn KFH_fnc_clientPlayerPositionMarkerLoop;
+[] call KFH_fnc_installTeammateWorldMarkersLocal;
 [] spawn KFH_fnc_installTacticalPingControls;
 [] spawn KFH_fnc_installPerspectiveControls;
 [] spawn KFH_fnc_installPlayerCombatActions;

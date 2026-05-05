@@ -164,14 +164,14 @@ class Params
         title = "Checkpoints";
         values[] = {3,4,5,6,7,8,9,10};
         texts[] = {"3","4","5","6","7","8","9","10"};
-        default = 6;
+        default = 4;
     };
     class KFH_AnnouncementLanguage
     {
         title = "Announcement Language";
         values[] = {0,1,2};
         texts[] = {"Japanese","English","Chinese (Simplified)"};
-        default = 0;
+        default = 1;
     };
     class KFH_ParamsHeader_Environment
     {
@@ -241,7 +241,14 @@ class Params
         title = "Difficulty";
         values[] = {0,1,2,3};
         texts[] = {"Easy","Normal","Hard","Very Hard"};
-        default = 1;
+        default = 0;
+    };
+    class KFH_PlayerHealthMultiplier
+    {
+        title = "Player Health Multiplier";
+        values[] = {50,75,100,150,200,300};
+        texts[] = {"0.5x","0.75x","1x","1.5x","2x","3x"};
+        default = 100;
     };
     class KFH_EnemySkill
     {
@@ -277,6 +284,13 @@ class Params
         values[] = {125,100,85,70};
         texts[] = {"Longer","Normal","Short","Very Short"};
         default = 100;
+    };
+    class KFH_CheckpointCaptureSeconds
+    {
+        title = "Checkpoint Capture Time";
+        values[] = {30,45,60,90,120};
+        texts[] = {"30s","45s","60s","90s","120s"};
+        default = 60;
     };
     class KFH_SpecialThreatScale
     {
