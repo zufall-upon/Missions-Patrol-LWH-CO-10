@@ -247,6 +247,45 @@ KFH_fnc_isOptionalContentClass = {
     (_prefixes findIf { (_lowerClass find (toLowerANSI _x)) isEqualTo 0 }) >= 0
 };
 
+KFH_fnc_noteRewardDlcExclusion = {
+    params [["_className", ""], ["_dlc", ""]];
+
+    if (_className isEqualTo "") exitWith {};
+    private _entries = missionNamespace getVariable ["KFH_rewardDlcExcludedClasses", []];
+    private _entry = format ["%1:%2", _className, _dlc];
+    if !(_entry in _entries) then {
+        _entries pushBack _entry;
+        missionNamespace setVariable ["KFH_rewardDlcExcludedClasses", _entries, true];
+    };
+};
+
+KFH_fnc_isRewardConfigClassAllowed = {
+    params [["_configRoot", "CfgWeapons"], ["_className", ""]];
+
+    if (_className isEqualTo "") exitWith { false };
+    private _cfg = configFile >> _configRoot >> _className;
+    if !(isClass _cfg) exitWith { false };
+    if !(missionNamespace getVariable ["KFH_rewardExcludeDlcEquipment", true]) exitWith { true };
+    if ([_className] call KFH_fnc_isOptionalContentClass) exitWith { true };
+
+    private _dlc = getText (_cfg >> "DLC");
+    if !(_dlc isEqualTo "") exitWith {
+        [_className, _dlc] call KFH_fnc_noteRewardDlcExclusion;
+        false
+    };
+
+    true
+};
+
+KFH_fnc_logRewardDlcExclusionSummary = {
+    params [["_context", "reward"]];
+
+    private _entries = missionNamespace getVariable ["KFH_rewardDlcExcludedClasses", []];
+    if ((count _entries) <= 0) exitWith {};
+    private _sample = (_entries select [0, 8]) joinString ", ";
+    [format ["Reward DLC filter %1: excluded=%2 sample=%3.", _context, count _entries, _sample]] call KFH_fnc_log;
+};
+
 KFH_fnc_filterExistingVehicleClasses = {
     params [["_classes", []], ["_optionalClasses", []]];
 
@@ -264,13 +303,94 @@ KFH_fnc_filterExistingVehicleClasses = {
     _pool
 };
 
+KFH_fnc_countVehicleTurretSeats = {
+    params ["_cfg"];
+
+    private _count = 0;
+    {
+        if ((getNumber (_x >> "hasGunner")) > 0 || {isText (_x >> "gunnerType")}) then {
+            _count = _count + 1;
+        };
+        _count = _count + ([_x] call KFH_fnc_countVehicleTurretSeats);
+    } forEach ("true" configClasses (_cfg >> "Turrets"));
+
+    _count
+};
+
+KFH_fnc_getVehicleSeatSummary = {
+    params [["_className", ""]];
+
+    private _cfg = configFile >> "CfgVehicles" >> _className;
+    if !(isClass _cfg) exitWith { [0, 0, 0] };
+
+    private _transportSoldier = getNumber (_cfg >> "transportSoldier");
+    private _driverSeats = if ((getNumber (_cfg >> "hasDriver")) > 0) then { 1 } else { 0 };
+    private _turretSeats = [_cfg] call KFH_fnc_countVehicleTurretSeats;
+    private _crewCapacity = _driverSeats + _turretSeats;
+
+    [_transportSoldier, _crewCapacity, _transportSoldier + _crewCapacity]
+};
+
+KFH_fnc_logVehicleCapacity = {
+    params [["_context", "vehicle"], ["_className", ""]];
+
+    if !(missionNamespace getVariable ["KFH_vehicleCapacityLogEnabled", true]) exitWith {};
+    private _summary = [_className] call KFH_fnc_getVehicleSeatSummary;
+    _summary params ["_transportSoldier", "_crewCapacity", "_totalSeats"];
+    [format [
+        "Vehicle capacity %1: class=%2 transportSoldier=%3 crewCapacity=%4 totalSeats=%5.",
+        _context,
+        _className,
+        _transportSoldier,
+        _crewCapacity,
+        _totalSeats
+    ]] call KFH_fnc_log;
+};
+
+KFH_fnc_filterPassengerVehicleClasses = {
+    params [["_classes", []], ["_optionalClasses", []], ["_minSeats", 2], ["_context", "vehicle"]];
+
+    private _existing = [_classes, _optionalClasses] call KFH_fnc_filterExistingVehicleClasses;
+    private _filtered = _existing select { (([_x] call KFH_fnc_getVehicleSeatSummary) select 2) >= _minSeats };
+    private _excluded = _existing - _filtered;
+    private _loggedContexts = missionNamespace getVariable ["KFH_vehicleCapacityFilterLoggedContexts", []];
+    if ((count _excluded) > 0 && {!(_context in _loggedContexts)}) then {
+        _loggedContexts pushBack _context;
+        missionNamespace setVariable ["KFH_vehicleCapacityFilterLoggedContexts", _loggedContexts, true];
+        [format [
+            "Vehicle capacity filter %1: minSeats=%2 kept=%3 excluded=%4 sample=%5.",
+            _context,
+            _minSeats,
+            count _filtered,
+            count _excluded,
+            (_excluded select [0, 8]) joinString ", "
+        ]] call KFH_fnc_log;
+    };
+
+    _filtered
+};
+
+KFH_fnc_selectPassengerVehicleClass = {
+    params [["_classes", []], ["_optionalClasses", []], ["_optionalChance", 0.9], ["_minSeats", 2], ["_context", "vehicle"]];
+
+    private _vanilla = [_classes, [], _minSeats, format ["%1 vanilla", _context]] call KFH_fnc_filterPassengerVehicleClasses;
+    private _optional = [[], _optionalClasses, _minSeats, format ["%1 optional", _context]] call KFH_fnc_filterPassengerVehicleClasses;
+
+    if ((count _optional) > 0 && {((count _vanilla) isEqualTo 0) || {(random 1) < _optionalChance}}) exitWith {
+        selectRandom _optional
+    };
+    if ((count _vanilla) > 0) exitWith { selectRandom _vanilla };
+    if ((count _optional) > 0) exitWith { selectRandom _optional };
+    ""
+};
+
 KFH_fnc_filterExistingWeaponBundles = {
     params [["_bundles", []]];
 
     _bundles select {
         (count _x) >= 2 &&
-        {isClass (configFile >> "CfgWeapons" >> (_x select 0))} &&
-        {isClass (configFile >> "CfgMagazines" >> (_x select 1))}
+        {["CfgWeapons", _x select 0] call KFH_fnc_isRewardConfigClassAllowed} &&
+        {["CfgMagazines", _x select 1] call KFH_fnc_isRewardConfigClassAllowed}
     }
 };
 
@@ -357,6 +477,10 @@ KFH_fnc_configurePvEvERelations = {
     west setFriend [west, 1];
     east setFriend [east, 1];
     resistance setFriend [resistance, 1];
+    west setFriend [east, 0];
+    east setFriend [west, 0];
+    west setFriend [civilian, 1];
+    civilian setFriend [west, 1];
     west setFriend [resistance, 0];
     resistance setFriend [west, 0];
     east setFriend [resistance, 0];
@@ -606,8 +730,10 @@ KFH_fnc_spawnAmbientTrafficBetweenMarkers = {
 
     private _classes = [
         missionNamespace getVariable ["KFH_ambientTrafficClasses", ["C_Hatchback_01_F"]],
-        missionNamespace getVariable ["KFH_cupAmbientTrafficClasses", []]
-    ] call KFH_fnc_filterExistingVehicleClasses;
+        missionNamespace getVariable ["KFH_cupAmbientTrafficClasses", []],
+        missionNamespace getVariable ["KFH_ambientTrafficMinVehicleSeats", 2],
+        "ambient civilian traffic"
+    ] call KFH_fnc_filterPassengerVehicleClasses;
     private _drivers = missionNamespace getVariable ["KFH_ambientTrafficDriverClasses", ["C_man_1"]];
     if ((count _classes) isEqualTo 0 || {(count _drivers) isEqualTo 0}) exitWith { objNull };
 
@@ -631,6 +757,7 @@ KFH_fnc_spawnAmbientTrafficBetweenMarkers = {
     private _vehicleClass = selectRandom _classes;
 
     private _vehicle = createVehicle [_vehicleClass, _spawnPos, [], 0, "NONE"];
+    ["ambient civilian traffic", _vehicleClass] call KFH_fnc_logVehicleCapacity;
     _vehicle setDir _dir;
     _vehicle setPosATL _spawnPos;
     _vehicle setDamage 0;
@@ -847,8 +974,10 @@ KFH_fnc_spawnEnvCivilianPedestrian = {
 KFH_fnc_spawnEnvCivilianSceneVehicle = {
     private _classes = [
         missionNamespace getVariable ["KFH_ambientTrafficClasses", ["C_Hatchback_01_F"]],
-        missionNamespace getVariable ["KFH_cupAmbientTrafficClasses", []]
-    ] call KFH_fnc_filterExistingVehicleClasses;
+        missionNamespace getVariable ["KFH_cupAmbientTrafficClasses", []],
+        missionNamespace getVariable ["KFH_ambientTrafficMinVehicleSeats", 2],
+        "near-scene civilian vehicle"
+    ] call KFH_fnc_filterPassengerVehicleClasses;
     private _drivers = missionNamespace getVariable ["KFH_ambientTrafficDriverClasses", ["C_man_1"]];
     if ((count _classes) isEqualTo 0 || {(count _drivers) isEqualTo 0}) exitWith { grpNull };
 
@@ -872,6 +1001,7 @@ KFH_fnc_spawnEnvCivilianSceneVehicle = {
     if !(isClass (configFile >> "CfgVehicles" >> _driverClass)) exitWith { grpNull };
 
     private _vehicle = createVehicle [_vehicleClass, _spawnPos, [], 0, "NONE"];
+    ["near-scene civilian vehicle", _vehicleClass] call KFH_fnc_logVehicleCapacity;
     _vehicle setDir _dir;
     _vehicle setPosATL _spawnPos;
     _vehicle setDamage (random 0.08);

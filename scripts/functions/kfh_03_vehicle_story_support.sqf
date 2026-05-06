@@ -111,8 +111,12 @@ KFH_fnc_installPatrolVehicleDurability = {
         params ["_vehicle", "_selection", "_incomingDamage", "_source"];
 
         if (isNull _vehicle) exitWith { _incomingDamage };
-        private _currentDamage = damage _vehicle;
         private _isHitPoint = !(_selection isEqualTo "");
+        private _currentDamage = if (_isHitPoint) then {
+            (_vehicle getHitPointDamage _selection) max 0
+        } else {
+            damage _vehicle
+        };
         private _scale = if (_isHitPoint) then {
             missionNamespace getVariable ["KFH_startPatrolVehicleHitPointDamageScale", 0.05]
         } else {
@@ -864,6 +868,10 @@ KFH_fnc_doAmmoSupport = {
 KFH_fnc_doMedicalSupport = {
     params ["_caller"];
 
+    private _wasReviveState =
+        (_caller getVariable ["KFH_forcedDowned", false]) ||
+        {[_caller] call KFH_fnc_isIncapacitated};
+
     _caller setVariable ["KFH_forcedDowned", false, true];
     _caller setVariable ["KFH_forcedDownedAt", -1, true];
     _caller allowDamage true;
@@ -875,7 +883,7 @@ KFH_fnc_doMedicalSupport = {
     _caller setFatigue 0;
     [_caller] call KFH_fnc_applyPrototypeCarryCapacity;
 
-    if (local _caller) then {
+    if (_wasReviveState && {local _caller}) then {
         [] call KFH_fnc_scheduleLocalReviveCleanup;
     };
 

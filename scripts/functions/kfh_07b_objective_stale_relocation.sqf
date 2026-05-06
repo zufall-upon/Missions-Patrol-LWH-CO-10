@@ -118,13 +118,25 @@ KFH_fnc_isUnitVisibleToHumans = {
     _visible
 };
 
+KFH_fnc_isEnemySafeToRelocateOrReplace = {
+    params ["_unit", ["_reason", "relocate"]];
+
+    if (isNull _unit || {!alive _unit}) exitWith { false };
+
+    private _minHumanDistance = missionNamespace getVariable ["KFH_enemyRelocateReplaceMinHumanDistance", 95];
+    if (([getPosATL _unit] call KFH_fnc_getNearestHumanDistance) <= _minHumanDistance) exitWith { false };
+    if ([_unit] call KFH_fnc_isUnitVisibleToHumans) exitWith { false };
+
+    true
+};
+
 KFH_fnc_relocateStaleEnemyToObjective = {
     params ["_unit"];
 
     if !(missionNamespace getVariable ["KFH_staleEnemyRelocateEnabled", true]) exitWith { false };
     if (isNull _unit || {!alive _unit}) exitWith { false };
     if ([_unit] call KFH_fnc_isJuggernautEnemy) exitWith { false };
-    if ([_unit] call KFH_fnc_isUnitVisibleToHumans) exitWith { false };
+    if !([_unit, "stale relocate"] call KFH_fnc_isEnemySafeToRelocateOrReplace) exitWith { false };
 
     private _markerName = missionNamespace getVariable ["KFH_currentObjectiveMarker", ""];
     if !(_markerName in allMapMarkers) exitWith { false };
@@ -152,6 +164,7 @@ KFH_fnc_relocateStaleEnemyToObjective = {
         ] call KFH_fnc_findSafeDistantSpawnPosition;
     };
     if ((count _spawnPos) < 2) exitWith { false };
+    if (_spawnStage isEqualTo "lane-open") exitWith { false };
 
     private _maxObjectiveDistance = missionNamespace getVariable [
         "KFH_staleEnemyRelocateMaxObjectiveDistance",
@@ -174,7 +187,8 @@ KFH_fnc_relocateStaleEnemyToObjective = {
     _unit setVariable ["KFH_nextCommandMoveAt", 0];
     _unit setVariable ["KFH_nextForcedDestinationAt", 0];
     if (_isExternalZombie) then {
-        _unit setVariable ["WBK_AI_LastKnownLoc", _targetPos, true];
+        _unit setVariable ["WBK_AI_LastKnownLoc", getPosATL _unit, true];
+        _unit setVariable ["KFH_webKnightTargetBridgePos", _targetPos, true];
     } else {
         _unit enableAI "MOVE";
         _unit enableAI "PATH";
@@ -431,17 +445,115 @@ KFH_fnc_getCheckpointBlockingThreats = {
     }
 };
 
+KFH_fnc_findCheckpointAssaultRespawnPosition = {
+    params ["_checkpointPos", ["_target", objNull]];
+
+    private _minDistance = missionNamespace getVariable ["KFH_checkpointAssaultRespawnMinDistance", 42];
+    private _maxDistance = missionNamespace getVariable ["KFH_checkpointAssaultRespawnMaxDistance", 82];
+    private _maxObjectiveDistance = missionNamespace getVariable ["KFH_checkpointAssaultRespawnMaxObjectiveDistance", 120];
+    private _minPlayerDistance = missionNamespace getVariable ["KFH_checkpointAssaultRespawnMinPlayerDistance", 32];
+    private _minRespawnDistance = missionNamespace getVariable ["KFH_checkpointAssaultRespawnMinRespawnDistance", 26];
+    private _attempts = missionNamespace getVariable ["KFH_checkpointAssaultRespawnAttempts", 28];
+    private _result = [];
+
+    for "_i" from 1 to _attempts do {
+        if ((count _result) isEqualTo 0) then {
+            private _dir = if (!isNull _target && {alive _target}) then {
+                ((getPosATL _target) getDir _checkpointPos) + 150 + random 60
+            } else {
+                random 360
+            };
+            private _seed = _checkpointPos getPos [_minDistance + random ((_maxDistance - _minDistance) max 1), _dir];
+            private _candidate = [_seed, 0, 7, 1, 0, 0.45, 0] call BIS_fnc_findSafePos;
+            if ((count _candidate) < 3) then { _candidate set [2, 0]; };
+            if (
+                !((_candidate select 0) isEqualTo 0 && {(_candidate select 1) isEqualTo 0}) &&
+                {!surfaceIsWater _candidate} &&
+                {(_candidate distance2D _checkpointPos) <= _maxObjectiveDistance} &&
+                {[_candidate, objNull, _minPlayerDistance, _minRespawnDistance, 1.5, false] call KFH_fnc_isSpawnCandidateOpen}
+            ) then {
+                _result = +_candidate;
+            };
+        };
+    };
+
+    if ((count _result) isEqualTo 0) then {
+        private _fallback = _checkpointPos getPos [_minDistance + random ((_maxDistance - _minDistance) max 1), random 360];
+        _fallback set [2, 0];
+        if (
+            !surfaceIsWater _fallback &&
+            {(_fallback distance2D _checkpointPos) <= _maxObjectiveDistance} &&
+            {[_fallback, _minPlayerDistance, _minRespawnDistance] call KFH_fnc_isSpawnFarFromFriendlies}
+        ) then {
+            _result = +_fallback;
+        };
+    };
+
+    if ((count _result) >= 2 && {(_result distance2D _checkpointPos) > _maxObjectiveDistance}) then {
+        [format [
+            "Checkpoint assault respawn rejected far candidate: candidate=%1 checkpoint=%2 dist=%3 max=%4.",
+            mapGridPosition _result,
+            mapGridPosition _checkpointPos,
+            round (_result distance2D _checkpointPos),
+            _maxObjectiveDistance
+        ]] call KFH_fnc_log;
+        _result = [];
+    };
+
+    _result
+};
+
+KFH_fnc_respawnObjectiveEnemyForCheckpointAssault = {
+    params ["_unit", "_checkpointPos"];
+
+    if (isNull _unit || {!alive _unit}) exitWith { false };
+    if ([_unit] call KFH_fnc_isJuggernautEnemy) exitWith { false };
+    if !([_unit, "checkpoint assault respawn"] call KFH_fnc_isEnemySafeToRelocateOrReplace) exitWith { false };
+
+    private _cooldown = missionNamespace getVariable ["KFH_checkpointAssaultRespawnUnitCooldown", 12];
+    private _nextAt = _unit getVariable ["KFH_checkpointAssaultRespawnNextAt", 0];
+    if (time < _nextAt) exitWith { false };
+
+    private _target = [_checkpointPos] call KFH_fnc_getNearestHumanReferenceUnit;
+    private _targetPos = if (!isNull _target && {alive _target}) then { getPosATL _target } else { +_checkpointPos };
+    private _spawnPos = [_checkpointPos, _target] call KFH_fnc_findCheckpointAssaultRespawnPosition;
+    if ((count _spawnPos) < 2 || {surfaceIsWater _spawnPos}) exitWith { false };
+
+    _unit setPosATL _spawnPos;
+    _unit setDir (_spawnPos getDir _targetPos);
+    _unit setVariable ["KFH_staleSince", -1];
+    _unit setVariable ["KFH_recyclePendingLogged", false];
+    _unit setVariable ["KFH_checkpointAssaultRespawnNextAt", time + _cooldown, true];
+
+    if ((_unit getVariable ["KFH_enemyRole", ""]) isEqualTo "externalZombie") then {
+        _unit setVariable ["WBK_AI_LastKnownLoc", getPosATL _unit, true];
+        _unit setVariable ["KFH_webKnightTargetBridgePos", _targetPos, true];
+        _unit setVariable ["KFH_externalZombieLastPos", _spawnPos, true];
+        _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+        _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+    } else {
+        [_unit, _target, _targetPos] call KFH_fnc_driveEnemyTowardTarget;
+    };
+
+    [format [
+        "Checkpoint assault respawned objective hostile: %1 -> %2 target=%3.",
+        typeOf _unit,
+        mapGridPosition _spawnPos,
+        if (isNull _target) then { "checkpoint" } else { name _target }
+    ]] call KFH_fnc_log;
+    true
+};
+
 KFH_fnc_nudgeObjectiveEnemiesTowardCheckpoint = {
     params ["_objectiveEnemies", "_checkpointPos"];
 
     private _nudged = 0;
     {
         if (alive _x && {!([_x] call KFH_fnc_isJuggernautEnemy)}) then {
-            if (
-                ((_x getVariable ["KFH_enemyRole", ""]) isEqualTo "externalZombie") &&
-                {missionNamespace getVariable ["KFH_webKnightReplaceExternalOnStall", true]}
-            ) then {
-                [_x, "checkpoint stall"] call KFH_fnc_replaceWebKnightExternalZombie;
+            if (missionNamespace getVariable ["KFH_checkpointAssaultRespawnEnabled", true]) then {
+                if ([_x, _checkpointPos] call KFH_fnc_respawnObjectiveEnemyForCheckpointAssault) then {
+                    _nudged = _nudged + 1;
+                };
             } else {
                 private _nearestHuman = [getPosATL _x] call KFH_fnc_getNearestHumanReferenceUnit;
                 private _targetPos = if (
@@ -453,8 +565,8 @@ KFH_fnc_nudgeObjectiveEnemiesTowardCheckpoint = {
                     _checkpointPos
                 };
                 [_x, _nearestHuman, _targetPos] call KFH_fnc_driveEnemyTowardTarget;
+                _nudged = _nudged + 1;
             };
-            _nudged = _nudged + 1;
         };
     } forEach _objectiveEnemies;
 
@@ -474,7 +586,12 @@ KFH_fnc_driveEnemyTowardTarget = {
     if ((count _targetPos) < 2) exitWith {};
 
     if ((_unit getVariable ["KFH_enemyRole", ""]) isEqualTo "externalZombie") exitWith {
-        _unit setVariable ["WBK_AI_LastKnownLoc", _targetPos, true];
+        if (!isNull _target && {alive _target} && {!(isNil "KFH_fnc_applyWebKnightTargetBridge")}) then {
+            [_unit, _target, _targetPos] call KFH_fnc_applyWebKnightTargetBridge;
+        } else {
+            _unit setVariable ["WBK_AI_LastKnownLoc", getPosATL _unit, true];
+            _unit setVariable ["KFH_webKnightTargetBridgePos", _targetPos, true];
+        };
     };
 
     private _groupRef = group _unit;

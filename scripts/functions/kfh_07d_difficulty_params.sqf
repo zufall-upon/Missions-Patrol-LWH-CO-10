@@ -72,8 +72,6 @@ KFH_fnc_applyExtractionAndAreaParams = {
 
     KFH_startPatrolVehicleMax = ["KFH_StartPatrolVehicleMax", missionNamespace getVariable ["KFH_startPatrolVehicleMaxParamDefault", KFH_startPatrolVehicleMax]] call BIS_fnc_getParamValue;
     KFH_checkpointMobilityVehicleCount = ["KFH_CheckpointVehicleCount", missionNamespace getVariable ["KFH_checkpointVehicleCountParamDefault", KFH_checkpointMobilityVehicleCount]] call BIS_fnc_getParamValue;
-    KFH_checkpointMobilityVehicleCountByScale = [];
-    KFH_checkpointMobilityVehicleLateMax = KFH_checkpointMobilityVehicleCount;
     KFH_finalArsenalCooldownSeconds = ["KFH_FinalArsenalCooldown", missionNamespace getVariable ["KFH_finalArsenalCooldownParamDefault", KFH_finalArsenalCooldownSeconds]] call BIS_fnc_getParamValue;
 
     [format [
@@ -92,7 +90,7 @@ KFH_fnc_applyTrafficAndSpawnParams = {
     private _roadblockScale = (["KFH_RoadblockCount", missionNamespace getVariable ["KFH_roadblockCountParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
     private _spawnDistanceMode = ["KFH_EnemySpawnDistance", missionNamespace getVariable ["KFH_enemySpawnDistanceParamDefault", 0]] call BIS_fnc_getParamValue;
     private _villagePatrolScale = (["KFH_VillagePatrolSpawns", missionNamespace getVariable ["KFH_villagePatrolSpawnsParamDefault", 100]] call BIS_fnc_getParamValue) / 100;
-    private _civilianSuicideBombChance = (["KFH_CivilianSuicideBombFrequency", missionNamespace getVariable ["KFH_civilianSuicideBombFrequencyParamDefault", 8]] call BIS_fnc_getParamValue) / 100;
+    private _civilianSuicideBombChance = 0;
 
     KFH_ambientTrafficEnabled = _civilianTrafficScale > 0;
     KFH_ambientTrafficChance = (KFH_ambientTrafficChance * _civilianTrafficScale) min 1;

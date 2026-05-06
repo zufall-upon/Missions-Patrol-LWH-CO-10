@@ -112,6 +112,7 @@ KFH_fnc_installFlareSignalHandler = {
         if ((missionNamespace getVariable ["KFH_phase", "boot"]) isNotEqualTo "extract") exitWith {};
         if !([_weapon, _ammo] call KFH_fnc_isFlareShot) exitWith {};
 
+        [format ["Flare signal fired: unit=%1 weapon=%2 muzzle=%3 magazine=%4 ammo=%5.", name _unit, _weapon, _muzzle, _magazine, _ammo]] call KFH_fnc_log;
         [_unit, getPosATL _unit, _weapon, _ammo] remoteExecCall ["KFH_fnc_reportFlareLaunch", 2];
     }];
 };

@@ -11,6 +11,7 @@ if (!hasInterface) exitWith {};
         [] call KFH_fnc_placePlayerAtCaveStartOnce;
     };
     if (missionNamespace getVariable ["KFH_dynamicRouteEnabled", false]) then {
+        [] call KFH_fnc_placePlayerAtTemporaryGroundStartLocal;
         waitUntil {
             !(missionNamespace getVariable ["KFH_dynamicRouteEnabled", false]) ||
             {missionNamespace getVariable ["KFH_dynamicRouteBuilt", false]}
@@ -22,6 +23,7 @@ if (!hasInterface) exitWith {};
         };
     };
     [player] call KFH_fnc_applyFriendlyFireMitigation;
+    [player] call KFH_fnc_protectFriendlyRating;
     [player] call KFH_fnc_installPlayerDownedProtection;
     ["Preload"] call BIS_fnc_arsenal;
     [] call KFH_fnc_installArsenalLoadoutTracker;
@@ -63,8 +65,11 @@ if (!hasInterface) exitWith {};
             [_unit] call KFH_fnc_installLoadoutSnapshotHandlers;
             [_unit] call KFH_fnc_installFlareSignalHandler;
             [_unit] call KFH_fnc_applyFriendlyFireMitigation;
+            [_unit] call KFH_fnc_protectFriendlyRating;
             [_unit] call KFH_fnc_installPlayerDownedProtection;
             [_unit] call KFH_fnc_applyPrototypeCarryCapacity;
+            [_corpse, _unit, "player respawn corpse"] remoteExecCall ["KFH_fnc_cleanupFriendlyCorpse", 2];
+            [_unit, "player respawn"] remoteExecCall ["KFH_fnc_cleanupDuplicateFriendlyBodies", 2];
             _unit setVariable ["KFH_clientReadyForInitialWave", true, true];
             if (_restoreAsDowned) then {
                 private _restoredInsideVehicle = false;

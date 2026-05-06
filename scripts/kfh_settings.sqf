@@ -34,7 +34,7 @@ KFH_enemyTrafficFrequencyParamDefault = 100;
 KFH_roadblockCountParamDefault = 100;
 KFH_enemySpawnDistanceParamDefault = 0;
 KFH_villagePatrolSpawnsParamDefault = 100;
-KFH_civilianSuicideBombFrequencyParamDefault = 8;
+KFH_civilianSuicideBombFrequencyParamDefault = 0;
 KFH_announcementLanguageDefault = 1;
 KFH_friendlyFireScale = 0.01;
 KFH_captureRadius = 25;
@@ -236,6 +236,8 @@ KFH_ambientTrafficVehiclesPerSegment = 2;
 KFH_ambientTrafficChance = 1;
 KFH_ambientTrafficFuelMin = 0.25;
 KFH_ambientTrafficFuelMax = 0.55;
+KFH_vehicleCapacityLogEnabled = true;
+KFH_ambientTrafficMinVehicleSeats = 2;
 KFH_ambientTrafficClasses = [
     "C_Hatchback_01_F",
     "C_Offroad_01_F",
@@ -402,8 +404,8 @@ KFH_envMilitaryCheckpointObjects = [
     ["RoadCone_F", [8, 3.8, 0], 0],
     ["RoadCone_F", [-8, -3.8, 0], 0]
 ];
-KFH_civilianKillPressurePenalty = 8;
-KFH_civilianKillExplosionChance = 0.08;
+KFH_civilianKillPressurePenalty = 0;
+KFH_civilianKillExplosionChance = 0;
 KFH_civilianKillExplosionClass = "Bo_Mk82";
 KFH_civilianKillExplosionRadius = 14;
 KFH_startPatrolVehicleClass = "C_Quadbike_01_F";
@@ -413,14 +415,14 @@ KFH_startPatrolVehicleMax = 6;
 KFH_startPatrolVehiclePerPlayers = 2;
 KFH_startPatrolVehicleGraceSeconds = 8;
 KFH_startPatrolVehicleSpeedBoost = 1.25;
-KFH_startPatrolVehicleBoostMaxKmh = 60;
-KFH_startPatrolVehicleDamageScale = 0.08;
-KFH_startPatrolVehicleHitPointDamageScale = 0.05;
-KFH_startPatrolVehicleDamageSoftCap = 0.22;
-KFH_startPatrolVehicleHitPointSoftCap = 0.18;
-KFH_startPatrolVehicleAutoRepairSeconds = 2.5;
-KFH_startPatrolVehicleAutoRepairMaxDamage = 0.28;
-KFH_startPatrolVehicleAutoRepairHitPointCap = 0.12;
+KFH_startPatrolVehicleBoostMaxKmh = 75;
+KFH_startPatrolVehicleDamageScale = 0.04;
+KFH_startPatrolVehicleHitPointDamageScale = 0.015;
+KFH_startPatrolVehicleDamageSoftCap = 0.08;
+KFH_startPatrolVehicleHitPointSoftCap = 0.035;
+KFH_startPatrolVehicleAutoRepairSeconds = 1;
+KFH_startPatrolVehicleAutoRepairMaxDamage = 0.05;
+KFH_startPatrolVehicleAutoRepairHitPointCap = 0.015;
 KFH_startAssetDirCorrection = 180;
 KFH_vehicleFlipEnabled = true;
 KFH_vehicleFlipDistance = 7;
@@ -494,16 +496,16 @@ KFH_checkpointMobilityVehicleCountByScale = [1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3]
 KFH_checkpointMobilityVehicleLateMax = 2;
 KFH_checkpointMobilityVehicleFuelMin = 0.18;
 KFH_checkpointMobilityVehicleFuelMax = 0.24;
+KFH_checkpointMobilityMinVehicleSeats = 2;
 KFH_checkpointMobilityVehicleClasses = [
     "C_Quadbike_01_F",
     "B_Quadbike_01_F",
-    "B_LSV_01_unarmed_F",
-    "C_Offroad_01_F"
+    "C_Offroad_01_F",
+    "C_Van_01_transport_F"
 ];
 KFH_cupCheckpointMobilityVehicleClasses = [
     "rhsusf_mrzr4_w",
-    "rhsusf_m998_w_2dr",
-    "B_LSV_01_unarmed_F"
+    "rhsusf_m998_w_2dr"
 ];
 KFH_checkpointMobilityVehicleOffsets = [
     [-13, -8, 0, -35],
@@ -562,8 +564,26 @@ KFH_checkpointStallRescueCount = 4;
 KFH_checkpointStallFarDistance = 140;
 KFH_checkpointStallInvisibleDistance = 95;
 KFH_checkpointNudgeHumanTargetDistance = 260;
+KFH_checkpointAssaultRespawnEnabled = true;
+KFH_checkpointAssaultRespawnMinDistance = 42;
+KFH_checkpointAssaultRespawnMaxDistance = 82;
+KFH_checkpointAssaultRespawnMaxObjectiveDistance = 120;
+KFH_checkpointAssaultRespawnMinPlayerDistance = 32;
+KFH_checkpointAssaultRespawnMinRespawnDistance = 26;
+KFH_checkpointAssaultRespawnAttempts = 28;
+KFH_checkpointAssaultRespawnUnitCooldown = 8;
+KFH_enemyRelocateReplaceMinHumanDistance = 95;
+KFH_checkpointAssaultBurstEnabled = true;
+KFH_checkpointAssaultBurstCount = 5;
+KFH_checkpointAssaultBurstHeavyChance = 0.02;
+KFH_checkpointAssaultBurstCooldown = 15;
+KFH_checkpointAssaultBurstMaxPerCheckpoint = 2;
+KFH_checkpointAssaultBurstMinWaveCooldown = 12;
 KFH_initialWaveReadyTimeout = 20;
 KFH_initialWaveReadyBuffer = 3;
+KFH_initialWaveWarmupSeconds = 60;
+KFH_initialPlacementSettleSeconds = 3.5;
+KFH_initialPlacementGroundZ = 0.05;
 KFH_objectiveThreatRadius = 90;
 KFH_checkpointStatusInterval = 10;
 KFH_showCheckpointStatusChat = false;
@@ -591,6 +611,12 @@ KFH_webKnightReplacementMaxAttempts = 3;
 KFH_webKnightReplacementMinDistance = 34;
 KFH_webKnightReplacementMaxDistance = 75;
 KFH_webKnightReplaceExternalOnStall = true;
+KFH_webKnightVisibleStallDistance = 65;
+KFH_webKnightVisibleStallSeconds = 2.8;
+KFH_webKnightVisibleStallMoveDistance = 0.9;
+KFH_webKnightVisibleStallGraceSeconds = 2.2;
+KFH_webKnightVisibleReinitCooldownSeconds = 4;
+KFH_webKnightVisibleReinitMaxAttempts = 3;
 KFH_webKnightNativeSpecialInitDelay = 0.45;
 KFH_webKnightNativeSpecialInitTimeout = 2;
 KFH_meleeAttackRange = 1.25;
@@ -807,6 +833,7 @@ KFH_rewardCacheOffset = [11, 2, 0];
 KFH_rewardWeaponCoverageRatio = 0.75;
 KFH_rewardBackpackCoverageRatio = 0.35;
 KFH_rewardWeaponMagazinePlayerBonusInterval = 2;
+KFH_rewardExcludeDlcEquipment = true;
 KFH_rewardPrePatrolATEnabled = true;
 KFH_rewardPrePatrolATLauncherCount = 2;
 KFH_rewardPrePatrolATBackpackCoverageRatio = 0.25;
@@ -870,6 +897,14 @@ KFH_branchRewardScreamerDistanceMin = 150;
 KFH_branchRewardScreamerDistanceMax = 260;
 KFH_branchRewardGuardCount = 2;
 KFH_branchRewardGuardMaxActiveReserve = 2;
+KFH_branchRewardContactDistanceMin = 55;
+KFH_branchRewardContactDistanceMax = 95;
+KFH_branchRewardContactGuardCount = 3;
+KFH_branchRewardContactSpecialRole = "screamer";
+KFH_branchRewardContactSpecialClassCandidates = [
+    "Zombie_Special_OPFOR_Screamer",
+    "Zombie_Special_OPFOR_Boomer"
+];
 KFH_finalArsenalOffset = [14, 6, 0];
 KFH_finalFlareCacheOffset = [24, 0, 0];
 KFH_optionalBaseEnabled = true;
@@ -884,10 +919,7 @@ KFH_optionalBaseSpecialClass = "WBK_Goliaph_1";
 KFH_optionalBaseSpecialClassCandidates = [
     "WBK_Goliaph_1",
     "WBK_Goliaph_2",
-    "WBK_Goliaph_3",
-    "WBK_SpecialZombie_Smasher_1",
-    "WBK_SpecialZombie_Smasher_2",
-    "WBK_SpecialZombie_Smasher_3"
+    "WBK_Goliaph_3"
 ];
 KFH_optionalBaseSpecialMinDistance = 34;
 KFH_optionalBaseSpecialMaxDistance = 70;
@@ -898,6 +930,7 @@ KFH_optionalBaseVehicleCount = 6;
 KFH_optionalBaseVehicleFuelMin = 0.22;
 KFH_optionalBaseVehicleFuelMax = 0.45;
 KFH_optionalBaseVehicleInvulnerableUntilEntered = false;
+KFH_optionalBaseVehicleMinSeats = 2;
 KFH_optionalBaseVehicleClasses = [
     "B_MRAP_01_F",
     "B_MRAP_01_hmg_F",
@@ -1080,9 +1113,10 @@ KFH_cupRewardWeaponBundlesTier1 = [
     ["rhs_weap_ak74m", "rhs_30Rnd_545x39_7N10_AK", 8, ["rhs_acc_ekp1", "rhs_acc_perst1ik"]]
 ];
 KFH_cupRewardWeaponBundlesTier2 = [
-    ["rhs_weap_m14ebrri", "rhsusf_20Rnd_762x51_m118_special_Mag", 8, ["rhsusf_acc_ACOG", "rhsusf_acc_grip2"]],
-    ["rhs_weap_svdp", "rhs_10Rnd_762x54mmR_7N1", 8, ["rhs_acc_pso1m2"]],
-    ["rhs_weap_M320", "1Rnd_HE_Grenade_shell", 8, []]
+    ["rhs_weap_m4a1", "rhs_mag_30Rnd_556x45_M855A1_Stanag", 10, ["optic_Arco", "rhsusf_acc_grip1", "rhsusf_acc_anpeq15side"]],
+    ["rhs_weap_m16a4", "rhs_mag_30Rnd_556x45_M855A1_Stanag", 10, ["rhsusf_acc_ACOG", "rhsusf_acc_grip2", "rhsusf_acc_anpeq15side"]],
+    ["rhs_weap_ak74m", "rhs_30Rnd_545x39_7N10_AK", 10, ["rhs_acc_ekp1", "rhs_acc_perst1ik"]],
+    ["rhs_weap_ak74m_2mag", "rhs_30Rnd_545x39_7N10_AK", 10, ["rhs_acc_1p78", "rhs_acc_perst1ik"]]
 ];
 KFH_cupRewardWeaponBundlesTier3 = [
     ["rhs_weap_pkm", "rhs_100Rnd_762x54mmR", 3, ["rhs_acc_pkas", "rhs_acc_1p78"]],

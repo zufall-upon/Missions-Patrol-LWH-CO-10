@@ -571,7 +571,8 @@ KFH_fnc_spawnSpecialInfected = {
 
     if ((_unit getVariable ["KFH_enemyRole", ""]) isEqualTo "externalZombie") then {
         private _webKnightKnownPos = if ((count _moveTarget) >= 2) then { _moveTarget } else { _centerPos };
-        _unit setVariable ["WBK_AI_LastKnownLoc", _webKnightKnownPos, true];
+        _unit setVariable ["WBK_AI_LastKnownLoc", getPosATL _unit, true];
+        _unit setVariable ["KFH_webKnightTargetBridgePos", _webKnightKnownPos, true];
     } else {
         if ((count _moveTarget) >= 2) then {
             _groupRef move _moveTarget;
@@ -776,6 +777,7 @@ KFH_fnc_getWildSpecialAnchor = {
 
 KFH_fnc_spawnWildSpecialInfected = {
     if !(missionNamespace getVariable ["KFH_wildSpecialEnabled", true]) exitWith { objNull };
+    if !(missionNamespace getVariable ["KFH_initialCombatReleased", false]) exitWith { objNull };
     private _checkpointIndex = missionNamespace getVariable ["KFH_currentCheckpoint", 1];
     if (_checkpointIndex < (missionNamespace getVariable ["KFH_wildSpecialStartCheckpoint", 2])) exitWith { objNull };
     private _threatScale = [] call KFH_fnc_getThreatScale;
@@ -881,6 +883,93 @@ KFH_fnc_isWebKnightCommonZombieReady = {
     {!(isNil {_unit getVariable "WBK_SynthHP"})}
 };
 
+KFH_fnc_describeWebKnightCommonZombieState = {
+    params [["_unit", objNull]];
+
+    if (isNull _unit) exitWith { "<null>" };
+
+    private _handlers = _unit getVariable ["WBK_AI_AttachedHandlers", []];
+    private _handlerCount = if (_handlers isEqualType []) then { count _handlers } else { -1 };
+    private _nearestEnemy = if (local _unit) then { _unit findNearestEnemy _unit } else { objNull };
+
+    format [
+        "ISZombie=%1 MoveSet=%2 SynthHP=%3 Pending=%4 Locked=%5 Handlers=%6 Sim=%7 Local=%8 Anim=%9 NearEnemy=%10",
+        !(isNil {_unit getVariable "WBK_AI_ISZombie"}),
+        !(isNil {_unit getVariable "WBK_AI_ZombieMoveSet"}),
+        !(isNil {_unit getVariable "WBK_SynthHP"}),
+        _unit getVariable ["KFH_externalZombieInitPending", false],
+        !(isNil {_unit getVariable "WBK_IsUnitLocked"}),
+        _handlerCount,
+        simulationEnabled _unit,
+        local _unit,
+        animationState _unit,
+        if (isNull _nearestEnemy) then { "<none>" } else { format ["%1/%2", typeOf _nearestEnemy, round (_unit distance2D _nearestEnemy)] }
+    ]
+};
+
+KFH_fnc_applyWebKnightTargetBridge = {
+    params ["_unit", "_target", ["_targetPos", []]];
+
+    if (isNull _unit || {!alive _unit}) exitWith { [] };
+    if (isNull _target || {!alive _target}) exitWith { [] };
+
+    private _targetVehicle = vehicle _target;
+    private _knownPos = if (!isNull _targetVehicle && {_targetVehicle != _target}) then {
+        getPosATL _targetVehicle
+    } else {
+        if ((count _targetPos) >= 2) then { +_targetPos } else { getPosATL _target }
+    };
+    private _groupRef = group _unit;
+
+    _unit reveal [_target, 4];
+    if (!isNull _groupRef) then { _groupRef reveal [_target, 4]; };
+    if (!isNull _targetVehicle && {_targetVehicle != _target}) then {
+        _unit reveal [_targetVehicle, 4];
+        if (!isNull _groupRef) then { _groupRef reveal [_targetVehicle, 4]; };
+    };
+    _unit setVariable ["WBK_AI_LastKnownLoc", getPosATL _unit, true];
+    _unit setVariable ["KFH_webKnightTargetBridgePos", _knownPos, true];
+
+    _knownPos
+};
+
+KFH_fnc_cleanupWebKnightRuntime = {
+    params ["_unit"];
+
+    if (isNull _unit) exitWith { 0 };
+
+    private _removedHandlers = 0;
+    private _handlers = _unit getVariable ["WBK_AI_AttachedHandlers", []];
+    if (_handlers isEqualType []) then {
+        {
+            if !(isNil "CBA_fnc_removePerFrameHandler") then {
+                [_x] call CBA_fnc_removePerFrameHandler;
+            };
+            _removedHandlers = _removedHandlers + 1;
+        } forEach _handlers;
+    };
+
+    {
+        _unit setVariable [_x, nil, true];
+    } forEach [
+        "WBK_AI_AttachedHandlers",
+        "WBK_AI_ISZombie",
+        "WBK_AI_ZombieMoveSet",
+        "WBK_SynthHP",
+        "WBK_IsUnitLocked",
+        "WBK_AI_LastKnownLoc",
+        "KFH_webKnightTargetBridgePos"
+    ];
+    {
+        _unit enableAI _x;
+    } forEach ["MOVE", "PATH", "ANIM", "FSM", "TARGET", "AUTOTARGET"];
+    _unit enableSimulation true;
+    _unit stop false;
+    _unit forceSpeed -1;
+
+    _removedHandlers
+};
+
 KFH_fnc_unregisterEnemyUnit = {
     params [["_unit", objNull]];
 
@@ -958,6 +1047,10 @@ KFH_fnc_prepareWebKnightReplacementBody = {
     removeBackpack _unit;
     _unit enableFatigue false;
     _unit allowFleeing 0;
+    _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+    _unit setVariable ["KFH_externalZombieLastPos", getPosATL _unit, true];
+    _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+    _unit setVariable ["KFH_externalZombieReadyAt", -1, true];
 
     if (_role isEqualTo "heavyInfected") then {
         _unit forceAddUniform (selectRandom KFH_heavyInfectedUniforms);
@@ -988,6 +1081,29 @@ KFH_fnc_replaceWebKnightExternalZombie = {
     if (isNull _unit || {!alive _unit}) exitWith { objNull };
     if (_unit getVariable ["KFH_webKnightReplacementInProgress", false]) exitWith { objNull };
     _unit setVariable ["KFH_webKnightReplacementInProgress", true, true];
+
+    private _safeToReplace = if (isNil "KFH_fnc_isEnemySafeToRelocateOrReplace") then {
+        !([_unit] call KFH_fnc_isUnitVisibleToHumans)
+    } else {
+        [_unit, _reason] call KFH_fnc_isEnemySafeToRelocateOrReplace
+    };
+    if (!_safeToReplace) exitWith {
+        private _target = [_unit] call KFH_fnc_findClosestCombatPlayer;
+        if (!isNull _target && {alive _target}) then {
+            [_unit, _target] call KFH_fnc_applyWebKnightTargetBridge;
+        };
+        _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+        _unit setVariable ["KFH_externalZombieLastPos", getPosATL _unit, true];
+        _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+        _unit setVariable ["KFH_webKnightReplacementInProgress", false, true];
+        [format [
+            "WebKnight external zombie replacement skipped near/visible players: class=%1 reason=%2 target=%3.",
+            typeOf _unit,
+            _reason,
+            if (isNull _target) then { "<none>" } else { name _target }
+        ]] call KFH_fnc_log;
+        _unit
+    };
 
     private _attempt = _unit getVariable ["KFH_webKnightReplacementAttempt", 0];
     private _maxAttempts = missionNamespace getVariable ["KFH_webKnightReplacementMaxAttempts", 3];
@@ -1052,7 +1168,8 @@ KFH_fnc_replaceWebKnightExternalZombie = {
         _replacement setVariable ["KFH_webKnightReplacementAttempt", _attempt + 1, true];
         _replacement setVariable ["KFH_webKnightNativeRole", _role, true];
         if ((count _moveTarget) >= 2) then {
-            _replacement setVariable ["WBK_AI_LastKnownLoc", _moveTarget, true];
+            _replacement setVariable ["WBK_AI_LastKnownLoc", getPosATL _replacement, true];
+            _replacement setVariable ["KFH_webKnightTargetBridgePos", _moveTarget, true];
         };
         if ([_replacement, _attempt + 1, _zombieType] call KFH_fnc_tryConfigureWebKnightZombie) then {
             private _activeEnemies = missionNamespace getVariable ["KFH_activeEnemies", []];
@@ -1199,10 +1316,12 @@ KFH_fnc_tryStartWebKnightNativeSpecialAI = {
     };
 
     if ((count _targetPos) >= 2) then {
-        _unit setVariable ["WBK_AI_LastKnownLoc", _targetPos, true];
         private _target = [_unit] call KFH_fnc_findClosestCombatPlayer;
         if (!isNull _target) then {
-            _unit reveal [_target, 4];
+            [_unit, _target, _targetPos] call KFH_fnc_applyWebKnightTargetBridge;
+        } else {
+            _unit setVariable ["WBK_AI_LastKnownLoc", getPosATL _unit, true];
+            _unit setVariable ["KFH_webKnightTargetBridgePos", _targetPos, true];
         };
     };
 
@@ -1223,6 +1342,9 @@ KFH_fnc_tryStartWebKnightNativeSpecialAI = {
         if (isNull _trackedUnit || {!alive _trackedUnit} || {!local _trackedUnit}) exitWith {};
         if ([_trackedUnit, _trackedRole] call KFH_fnc_isWebKnightNativeSpecialReady) exitWith {
             _trackedUnit setVariable ["KFH_externalZombieInitPending", false, true];
+            _trackedUnit setVariable ["KFH_externalZombieReadyAt", time, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastPos", getPosATL _trackedUnit, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastMoveAt", time, true];
         };
 
         private _script = [_trackedUnit, _trackedRole] call KFH_fnc_getWebKnightNativeSpecialAIScript;
@@ -1230,14 +1352,19 @@ KFH_fnc_tryStartWebKnightNativeSpecialAI = {
             _trackedUnit setVariable ["KFH_externalZombieInitPending", false, true];
         };
 
-        if !(isNil {_trackedUnit getVariable "WBK_AI_ISZombie"}) then {
-            _trackedUnit setVariable ["WBK_AI_ISZombie", nil, true];
-        };
+        private _removedHandlers = [_trackedUnit] call KFH_fnc_cleanupWebKnightRuntime;
         [_trackedUnit, _script, _trackedRole] call KFH_fnc_runWebKnightNativeSpecialAIScript;
         _trackedUnit setVariable ["KFH_webKnightNativeSpecialInitForced", true, true];
         if ((count _trackedTargetPos) >= 2) then {
-            _trackedUnit setVariable ["WBK_AI_LastKnownLoc", _trackedTargetPos, true];
+            private _target = [_trackedUnit] call KFH_fnc_findClosestCombatPlayer;
+            if (!isNull _target) then {
+                [_trackedUnit, _target, _trackedTargetPos] call KFH_fnc_applyWebKnightTargetBridge;
+            } else {
+                _trackedUnit setVariable ["WBK_AI_LastKnownLoc", getPosATL _trackedUnit, true];
+                _trackedUnit setVariable ["KFH_webKnightTargetBridgePos", _trackedTargetPos, true];
+            };
         };
+        [format ["WebKnight native special clean init forced: role=%1 class=%2 removedHandlers=%3 state={%4}.", _trackedRole, typeOf _trackedUnit, _removedHandlers, [_trackedUnit] call KFH_fnc_describeWebKnightCommonZombieState]] call KFH_fnc_log;
         private _forcedTimeoutAt = time + (missionNamespace getVariable ["KFH_webKnightNativeSpecialInitTimeout", 2]);
         waitUntil {
             sleep 0.2;
@@ -1250,6 +1377,9 @@ KFH_fnc_tryStartWebKnightNativeSpecialAI = {
         if (isNull _trackedUnit || {!alive _trackedUnit} || {!local _trackedUnit}) exitWith {};
         if ([_trackedUnit, _trackedRole] call KFH_fnc_isWebKnightNativeSpecialReady) then {
             _trackedUnit setVariable ["KFH_externalZombieInitPending", false, true];
+            _trackedUnit setVariable ["KFH_externalZombieReadyAt", time, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastPos", getPosATL _trackedUnit, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastMoveAt", time, true];
         } else {
             [_trackedUnit, format ["special init failed role=%1", _trackedRole]] call KFH_fnc_replaceWebKnightExternalZombie;
         };
@@ -1280,6 +1410,17 @@ KFH_fnc_tryConfigureWebKnightZombie = {
     _unit setVariable ["KFH_webKnightZombieType", _type, true];
     _unit setVariable ["KFH_webKnightReplacementAttempt", _replacementAttempt, true];
     _unit setVariable ["KFH_externalZombieInitPending", true, true];
+    _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+    _unit setVariable ["KFH_externalZombieLastPos", getPosATL _unit, true];
+    _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+    _unit setVariable ["KFH_externalZombieReadyAt", -1, true];
+    [format [
+        "WebKnight common zombie init started: class=%1 type=%2 attempt=%3 state={%4}.",
+        typeOf _unit,
+        _type,
+        _replacementAttempt,
+        [_unit] call KFH_fnc_describeWebKnightCommonZombieState
+    ]] call KFH_fnc_log;
 
     [_unit, _type] spawn {
         params ["_trackedUnit", "_zombieType"];
@@ -1304,8 +1445,7 @@ KFH_fnc_tryConfigureWebKnightZombie = {
             [_trackedUnit, _zombieType] call WBK_LoadAIThroughEden;
             private _target = [_trackedUnit] call KFH_fnc_findClosestCombatPlayer;
             if (!isNull _target) then {
-                _trackedUnit reveal [_target, 4];
-                _trackedUnit setVariable ["WBK_AI_LastKnownLoc", getPosATL _target, true];
+                [_trackedUnit, _target] call KFH_fnc_applyWebKnightTargetBridge;
             };
 
             private _timeoutAt = time + _timeout;
@@ -1317,6 +1457,14 @@ KFH_fnc_tryConfigureWebKnightZombie = {
                 {time >= _timeoutAt}
             };
             _ready = [_trackedUnit] call KFH_fnc_isWebKnightCommonZombieReady;
+            [format [
+                "WebKnight common zombie init attempt finished: class=%1 type=%2 attempt=%3 ready=%4 state={%5}.",
+                typeOf _trackedUnit,
+                _zombieType,
+                _attempt + 1,
+                _ready,
+                [_trackedUnit] call KFH_fnc_describeWebKnightCommonZombieState
+            ]] call KFH_fnc_log;
             _attempt = _attempt + 1;
         };
 
@@ -1324,12 +1472,192 @@ KFH_fnc_tryConfigureWebKnightZombie = {
         if (_ready) then {
             _trackedUnit setVariable ["KFH_externalZombieInitPending", false, true];
             _trackedUnit setVariable ["KFH_enemyRole", "externalZombie", true];
+            _trackedUnit setVariable ["KFH_externalZombieReadyAt", time, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastPos", getPosATL _trackedUnit, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+            [format [
+                "WebKnight common zombie ready: class=%1 type=%2 attempts=%3 state={%4}.",
+                typeOf _trackedUnit,
+                _zombieType,
+                _attempt,
+                [_trackedUnit] call KFH_fnc_describeWebKnightCommonZombieState
+            ]] call KFH_fnc_log;
         } else {
+            [format [
+                "WebKnight common zombie init failed: class=%1 type=%2 attempts=%3 state={%4}.",
+                typeOf _trackedUnit,
+                _zombieType,
+                _attempt,
+                [_trackedUnit] call KFH_fnc_describeWebKnightCommonZombieState
+            ]] call KFH_fnc_log;
             [_trackedUnit, _zombieType] call KFH_fnc_handleWebKnightCommonZombieInitFailure;
         };
     };
 
     true
+};
+
+KFH_fnc_recoverVisibleWebKnightZombie = {
+    params ["_unit", "_target", ["_reason", "visible stall"]];
+
+    if (isNull _unit || {!alive _unit}) exitWith { false };
+    if (isNull _target || {!alive _target}) exitWith { false };
+    if (_unit getVariable ["KFH_webKnightVisibleReinitInProgress", false]) exitWith { false };
+
+    private _cooldown = missionNamespace getVariable ["KFH_webKnightVisibleReinitCooldownSeconds", 4];
+    if (time < (_unit getVariable ["KFH_webKnightVisibleReinitNextAt", 0])) exitWith { false };
+
+    private _attempt = _unit getVariable ["KFH_webKnightVisibleReinitAttempts", 0];
+    private _maxAttempts = missionNamespace getVariable ["KFH_webKnightVisibleReinitMaxAttempts", 3];
+    if (_attempt >= _maxAttempts) exitWith {
+        [_unit, _target] call KFH_fnc_applyWebKnightTargetBridge;
+        false
+    };
+
+    _unit setVariable ["KFH_webKnightVisibleReinitInProgress", true, true];
+    _unit setVariable ["KFH_webKnightVisibleReinitAttempts", _attempt + 1, true];
+    _unit setVariable ["KFH_webKnightVisibleReinitNextAt", time + _cooldown, true];
+    private _targetPos = [_unit, _target] call KFH_fnc_applyWebKnightTargetBridge;
+    _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+    _unit setVariable ["KFH_externalZombieLastPos", getPosATL _unit, true];
+    _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+    _unit enableSimulation true;
+    _unit stop false;
+    _unit forceSpeed -1;
+    {
+        _unit enableAI _x;
+    } forEach ["MOVE", "PATH", "ANIM", "FSM", "TARGET", "AUTOTARGET"];
+
+    private _zombieType = _unit getVariable ["KFH_webKnightZombieType", selectRandom KFH_webKnightZombieTypes];
+    private _nativeRole = _unit getVariable ["KFH_webKnightNativeRole", _unit getVariable ["KFH_enemyRole", "externalZombie"]];
+    private _isSpecial = _unit getVariable ["KFH_specialInfected", false];
+    [_unit, _target, _targetPos, _zombieType, _nativeRole, _isSpecial, _reason] spawn {
+        params ["_trackedUnit", "_trackedTarget", "_trackedTargetPos", "_zombieType", "_nativeRole", "_isSpecial", "_reason"];
+
+        if (!local _trackedUnit) exitWith {
+            _trackedUnit setVariable ["KFH_webKnightVisibleReinitInProgress", false, true];
+        };
+
+        private _beforePos = getPosATL _trackedUnit;
+        if (!isNull _trackedTarget && {alive _trackedTarget}) then {
+            [_trackedUnit, _trackedTarget, _trackedTargetPos] call KFH_fnc_applyWebKnightTargetBridge;
+        };
+        sleep 0.65;
+        if (isNull _trackedUnit || {!alive _trackedUnit}) exitWith {};
+        private _bridgeMoved = _trackedUnit distance2D _beforePos;
+        if (_bridgeMoved < (missionNamespace getVariable ["KFH_webKnightVisibleStallMoveDistance", 0.9])) then {
+            private _removedHandlers = [_trackedUnit] call KFH_fnc_cleanupWebKnightRuntime;
+            if (!isNull _trackedTarget && {alive _trackedTarget}) then {
+                [_trackedUnit, _trackedTarget, _trackedTargetPos] call KFH_fnc_applyWebKnightTargetBridge;
+            };
+            if (_isSpecial) then {
+                private _script = [_trackedUnit, _nativeRole] call KFH_fnc_getWebKnightNativeSpecialAIScript;
+                if !(_script isEqualTo "") then {
+                    [_trackedUnit, _script, _nativeRole] call KFH_fnc_runWebKnightNativeSpecialAIScript;
+                };
+                [format [
+                    "WebKnight visible special clean reinit applied: class=%1 role=%2 reason=%3 bridgeMoved=%4 removedHandlers=%5 state={%6}.",
+                    typeOf _trackedUnit,
+                    _nativeRole,
+                    _reason,
+                    _bridgeMoved,
+                    _removedHandlers,
+                    [_trackedUnit] call KFH_fnc_describeWebKnightCommonZombieState
+                ]] call KFH_fnc_log;
+            } else {
+                [_trackedUnit, _zombieType] call WBK_LoadAIThroughEden;
+                [format [
+                    "WebKnight visible zombie clean reinit applied: class=%1 type=%2 reason=%3 bridgeMoved=%4 removedHandlers=%5 state={%6}.",
+                    typeOf _trackedUnit,
+                    _zombieType,
+                    _reason,
+                    _bridgeMoved,
+                    _removedHandlers,
+                    [_trackedUnit] call KFH_fnc_describeWebKnightCommonZombieState
+                ]] call KFH_fnc_log;
+            };
+        } else {
+            [format [
+                "WebKnight visible zombie target bridge recovered movement: class=%1 role=%2 reason=%3 moved=%4 state={%5}.",
+                typeOf _trackedUnit,
+                _nativeRole,
+                _reason,
+                _bridgeMoved,
+                [_trackedUnit] call KFH_fnc_describeWebKnightCommonZombieState
+            ]] call KFH_fnc_log;
+        };
+        sleep 0.35;
+        if (!isNull _trackedUnit && {alive _trackedUnit}) then {
+            _trackedUnit setVariable ["KFH_externalZombieReadyAt", time, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastPos", getPosATL _trackedUnit, true];
+            _trackedUnit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+            _trackedUnit setVariable ["KFH_webKnightVisibleReinitInProgress", false, true];
+        };
+    };
+
+    true
+};
+
+KFH_fnc_updateExternalZombieWatchdog = {
+    params ["_unit"];
+
+    if (isNull _unit || {!alive _unit}) exitWith {};
+    if (_unit getVariable ["KFH_externalZombieInitPending", false]) exitWith {};
+    if (_unit getVariable ["KFH_webKnightReplacementInProgress", false]) exitWith {};
+
+    private _target = [_unit] call KFH_fnc_findClosestCombatPlayer;
+    if (isNull _target) exitWith {
+        _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+        _unit setVariable ["KFH_externalZombieLastPos", getPosATL _unit, true];
+        _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+    };
+
+    private _targetPos = [_unit, _target] call KFH_fnc_applyWebKnightTargetBridge;
+
+    private _readyAt = _unit getVariable ["KFH_externalZombieReadyAt", -1];
+    private _graceSeconds = missionNamespace getVariable ["KFH_webKnightVisibleStallGraceSeconds", 2.2];
+    if (_readyAt > 0 && {time < (_readyAt + _graceSeconds)}) exitWith {};
+
+    private _distance = _unit distance2D _target;
+    private _maxDistance = missionNamespace getVariable ["KFH_webKnightVisibleStallDistance", 65];
+    if (_distance > _maxDistance) exitWith {
+        _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+        _unit setVariable ["KFH_externalZombieLastPos", getPosATL _unit, true];
+        _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+    };
+
+    if !([_unit] call KFH_fnc_isUnitVisibleToHumans) exitWith {
+        _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+    };
+
+    private _currentPos = getPosATL _unit;
+    private _lastPos = _unit getVariable ["KFH_externalZombieLastPos", _currentPos];
+    private _moved = _unit distance2D _lastPos;
+    private _moveDistance = missionNamespace getVariable ["KFH_webKnightVisibleStallMoveDistance", 0.9];
+    if (_moved >= _moveDistance) exitWith {
+        _unit setVariable ["KFH_externalZombieLastPos", _currentPos, true];
+        _unit setVariable ["KFH_externalZombieLastMoveAt", time, true];
+        _unit setVariable ["KFH_externalZombieStallSince", -1, true];
+        _unit setVariable ["KFH_webKnightVisibleReinitAttempts", 0, true];
+    };
+
+    private _stallSince = _unit getVariable ["KFH_externalZombieStallSince", -1];
+    if (_stallSince < 0) exitWith {
+        _unit setVariable ["KFH_externalZombieStallSince", time, true];
+    };
+
+    private _stallSeconds = missionNamespace getVariable ["KFH_webKnightVisibleStallSeconds", 2.8];
+    if ((time - _stallSince) < _stallSeconds) exitWith {};
+
+    [format [
+        "WebKnight zombie stalled near players; reinitializing unit: class=%1 role=%2 dist=%3 moved=%4 state={%5}.",
+        typeOf _unit,
+        _unit getVariable ["KFH_webKnightNativeRole", _unit getVariable ["KFH_enemyRole", "externalZombie"]],
+        round _distance,
+        _moved,
+        [_unit] call KFH_fnc_describeWebKnightCommonZombieState
+    ]] call KFH_fnc_log;
+    [_unit, _target, "visible near-player stall"] call KFH_fnc_recoverVisibleWebKnightZombie;
 };
 
 KFH_fnc_setupMeleeChaseState = {
@@ -1456,7 +1784,9 @@ KFH_fnc_updateMeleeEnemy = {
     if !(alive _unit) exitWith {};
     private _role = _unit getVariable ["KFH_enemyRole", "melee"];
     private _meleeChaserRoles = ["melee", "leaper", "heavyInfected", "bloater", "screamer", "smasher", "goliath"];
-    if (_role isEqualTo "externalZombie") exitWith {};
+    if (_role isEqualTo "externalZombie") exitWith {
+        [_unit] call KFH_fnc_updateExternalZombieWatchdog;
+    };
     if !(_role in _meleeChaserRoles) exitWith {};
 
     private _target = [_unit] call KFH_fnc_findClosestCombatPlayer;

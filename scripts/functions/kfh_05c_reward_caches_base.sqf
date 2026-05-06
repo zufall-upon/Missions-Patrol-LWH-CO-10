@@ -48,7 +48,7 @@ KFH_fnc_fillRewardCache = {
                 ["arifle_Katiba_C_F", "30Rnd_65x39_caseless_green", 8, ["optic_ACO_grn", "acc_pointer_IR"]],
                 ["arifle_MX_GL_F", "30Rnd_65x39_caseless_mag", 8, ["optic_Holosight", "acc_pointer_IR"]]
             ];
-            private _optionalBundles = (missionNamespace getVariable ["KFH_cupRewardWeaponBundlesTier2", []]) + ([2] call KFH_fnc_getDynamicRhsRewardBundles);
+            private _optionalBundles = missionNamespace getVariable ["KFH_cupRewardWeaponBundlesTier2", []];
 
             [_cache, 2, _backpackCount] call KFH_fnc_addRewardBackpacks;
             [_cache, _vanillaBundles, _optionalBundles, _weaponCount] call KFH_fnc_addRewardWeaponBundlePool;
@@ -100,7 +100,9 @@ KFH_fnc_fillRewardCache = {
         [format ["Checkpoint %1 reward cache guaranteed pre-patrol AT: %2 launcher(s).", _checkpointIndex, _addedAt]] call KFH_fnc_log;
     };
 
-    [format ["Reward cache filled for checkpoint %1 (%2).", _checkpointIndex, _tierName]] call KFH_fnc_log;
+    private _recentWeapons = (missionNamespace getVariable ["KFH_recentRewardWeaponBundles", []]) apply { _x select 0 };
+    [format ["Reward cache filled for checkpoint %1 (%2). weapons=%3.", _checkpointIndex, _tierName, _recentWeapons]] call KFH_fnc_log;
+["checkpoint reward cache"] call KFH_fnc_logRewardDlcExclusionSummary;
 };
 
 KFH_fnc_upgradeCheckpointSupplyReward = {
@@ -199,6 +201,7 @@ KFH_fnc_spawnBranchRewardCache = {
 
     ["side_cache_marked", [_checkpointIndex]] call KFH_fnc_notifyAllKey;
     [format ["Checkpoint %1 side cache revealed at %2.", _checkpointIndex, mapGridPosition (getMarkerPos _markerName)], "LOOT"] call KFH_fnc_appendRunEvent;
+    ["side cache"] call KFH_fnc_logRewardDlcExclusionSummary;
     [_markerName, _checkpointIndex] spawn KFH_fnc_watchBranchRewardPressure;
     [_markerName, _checkpointIndex] call KFH_fnc_spawnBranchRewardSpecials;
 
@@ -263,6 +266,63 @@ KFH_fnc_spawnBranchRewardSpecials = {
     _spawned
 };
 
+KFH_fnc_spawnBranchRewardContactAmbush = {
+    params ["_markerName", "_checkpointIndex"];
+
+    if !(_markerName in allMapMarkers) exitWith { [] };
+    private _cachePos = getMarkerPos _markerName;
+    private _spawned = [];
+
+    private _specialClass = [
+        missionNamespace getVariable ["KFH_branchRewardContactSpecialClassCandidates", []],
+        missionNamespace getVariable ["KFH_branchRewardScreamerClass", ""]
+    ] call KFH_fnc_selectExistingClass;
+    private _special = [
+        _cachePos,
+        _specialClass,
+        missionNamespace getVariable ["KFH_branchRewardContactSpecialRole", "screamer"],
+        missionNamespace getVariable ["KFH_branchRewardContactDistanceMin", 55],
+        missionNamespace getVariable ["KFH_branchRewardContactDistanceMax", 95],
+        _cachePos,
+        true,
+        true,
+        false
+    ] call KFH_fnc_spawnSpecialInfected;
+    if !(isNull _special) then { _spawned pushBack _special; };
+
+    private _guardCount = missionNamespace getVariable ["KFH_branchRewardContactGuardCount", 3];
+    if (_guardCount > 0) then {
+        private _guards = [
+            _cachePos,
+            [],
+            _guardCount,
+            0,
+            0,
+            0,
+            _cachePos,
+            format ["side-cache-%1-contact", _checkpointIndex],
+            _cachePos,
+            objNull,
+            true
+        ] call KFH_fnc_spawnGroupWave;
+        private _activeEnemies = missionNamespace getVariable ["KFH_activeEnemies", []];
+        _activeEnemies append _guards;
+        missionNamespace setVariable ["KFH_activeEnemies", _activeEnemies];
+        ["KFH_totalHostiles", count _activeEnemies] call KFH_fnc_setState;
+        _spawned append _guards;
+    };
+
+    if ((count _spawned) > 0) then {
+        [format [
+            "Side cache %1 contact ambush spawned %2 infected at %3.",
+            _checkpointIndex,
+            count _spawned,
+            mapGridPosition _cachePos
+        ], "PRESSURE"] call KFH_fnc_appendRunEvent;
+    };
+    _spawned
+};
+
 KFH_fnc_watchBranchRewardPressure = {
     params ["_markerName", "_checkpointIndex"];
 
@@ -284,6 +344,7 @@ KFH_fnc_watchBranchRewardPressure = {
     ["KFH_pressure", (_pressure + _pressureCost) min KFH_pressureMax] call KFH_fnc_setState;
     [format ["Side cache noise raised pressure by %1 near checkpoint %2.", _pressureCost, _checkpointIndex], "PRESSURE"] call KFH_fnc_appendRunEvent;
     ["side_cache_contact", [_checkpointIndex]] call KFH_fnc_notifyAllKey;
+    [_markerName, _checkpointIndex] call KFH_fnc_spawnBranchRewardContactAmbush;
 };
 
 KFH_fnc_spawnFinalFlareCache = {
@@ -362,6 +423,7 @@ KFH_fnc_fillFinalBaseSupply = {
             _crate setVariable ["KFH_supportLabel", "Emergency Ammo Reserve", true];
         };
     };
+    [format ["final base supply %1", _role]] call KFH_fnc_logRewardDlcExclusionSummary;
 };
 
 KFH_fnc_spawnOptionalBaseVehicles = {
@@ -380,8 +442,10 @@ KFH_fnc_spawnOptionalBaseVehicles = {
         private _className = [
             missionNamespace getVariable ["KFH_optionalBaseVehicleClasses", []],
             missionNamespace getVariable ["KFH_cupOptionalBaseVehicleClasses", []],
-            missionNamespace getVariable ["KFH_cupVehiclePreferredChance", 0.9]
-        ] call KFH_fnc_selectExistingWithOptionalPriority;
+            missionNamespace getVariable ["KFH_cupVehiclePreferredChance", 0.9],
+            missionNamespace getVariable ["KFH_optionalBaseVehicleMinSeats", 2],
+            "optional base vehicle"
+        ] call KFH_fnc_selectPassengerVehicleClass;
 
         if !(_className isEqualTo "") then {
             private _offset = if (_i < (count _offsets)) then {
@@ -392,6 +456,7 @@ KFH_fnc_spawnOptionalBaseVehicles = {
             _offset params [["_rightOffset", 0], ["_forwardOffset", 0], ["_heightOffset", 0], ["_dirOffset", 0]];
             private _vehicle = [_className, _markerName, [_rightOffset, _forwardOffset, _heightOffset], _dirOffset, 0, true] call KFH_fnc_spawnOutbreakObject;
             if !(isNull _vehicle) then {
+                ["optional base vehicle", _className] call KFH_fnc_logVehicleCapacity;
                 _vehicle setFuel (_fuelMin + random ((_fuelMax - _fuelMin) max 0.01));
                 _vehicle setDamage 0;
                 _vehicle lock 0;

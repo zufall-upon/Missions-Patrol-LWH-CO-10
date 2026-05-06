@@ -54,9 +54,12 @@ KFH_fnc_applyDebugTeammateCombatProfile = {
             if (missionNamespace getVariable ["KFH_debugTeammateDownedProtectionEnabled", true]) then {
                 private _damageThreshold = missionNamespace getVariable ["KFH_downedInterceptDamageThreshold", 0.72];
                 private _totalDamageThreshold = missionNamespace getVariable ["KFH_downedInterceptTotalDamageThreshold", 0.82];
+                private _hasHumanRescuer = (([] call KFH_fnc_getHumanPlayers) findIf {
+                    alive _x && {!([_x] call KFH_fnc_isIncapacitated)}
+                }) >= 0;
                 if (
                     (_scaledDamage >= _damageThreshold || {_scaledDamage >= _totalDamageThreshold}) &&
-                    {[_unit] call KFH_fnc_hasRescueCoverageFor}
+                    {_hasHumanRescuer || {[_unit] call KFH_fnc_hasRescueCoverageFor}}
                 ) exitWith {
                     [_unit, _source, "Echo fatal damage intercepted"] call KFH_fnc_forceUnitDowned;
                     _safeDamage
@@ -280,6 +283,19 @@ KFH_fnc_filterCompatibleWeaponAttachments = {
     }
 };
 
+KFH_fnc_getScalingTestAllyGroup = {
+    private _groupRef = missionNamespace getVariable ["KFH_scalingTestAllyGroup", grpNull];
+    if (isNull _groupRef) then {
+        _groupRef = createGroup [west, true];
+        _groupRef setGroupIdGlobal ["KFH Scaling Allies"];
+        _groupRef setCombatMode "RED";
+        _groupRef setBehaviourStrong "COMBAT";
+        _groupRef setSpeedMode "FULL";
+        missionNamespace setVariable ["KFH_scalingTestAllyGroup", _groupRef, true];
+    };
+    _groupRef
+};
+
 KFH_fnc_givePrimaryWeaponLoadout = {
     params ["_unit", "_weaponClass", "_magClass", ["_attachments", []], ["_extraMagCount", 0]];
 
@@ -428,6 +444,13 @@ KFH_fnc_spawnDebugTeammate = {
         [_unit] call KFH_fnc_applyDebugTeammateWeaponProfile;
     };
     [_unit] call KFH_fnc_applyDebugTeammateCombatProfile;
+    if !(_unit getVariable ["KFH_debugTeammateKilledFallbackInstalled", false]) then {
+        _unit setVariable ["KFH_debugTeammateKilledFallbackInstalled", true];
+        _unit addEventHandler ["Killed", {
+            params ["_unit", "_killer"];
+            [_unit, _killer] spawn KFH_fnc_replaceKilledDebugTeammateWithDowned;
+        }];
+    };
     _unit setVariable [
         "KFH_nextCombatProfileRefreshAt",
         time + (missionNamespace getVariable ["KFH_debugTeammateCombatProfileRefreshSeconds", 25])
@@ -435,9 +458,11 @@ KFH_fnc_spawnDebugTeammate = {
     [_unit] call KFH_fnc_applyPrototypeCarryCapacity;
     [_unit, "Medikit"] call KFH_fnc_addInventoryItem;
     [_unit] call KFH_fnc_applyFriendlyFireMitigation;
+    [_unit] call KFH_fnc_protectFriendlyRating;
     [_unit] call KFH_fnc_updateSavedLoadout;
     missionNamespace setVariable ["KFH_debugTeammate", _unit, true];
     missionNamespace setVariable ["KFH_lastAliveDebugTeammateAt", time, true];
+    [_unit, "debug teammate spawn"] call KFH_fnc_cleanupDuplicateFriendlyBodies;
 
     [format ["Wingman %1 joined the patrol.", KFH_debugTeammateName]] call KFH_fnc_log;
 
@@ -461,10 +486,8 @@ KFH_fnc_spawnScalingTestAlly = {
         _spawnPos = getMarkerPos "kfh_start";
     };
 
-    private _groupRef = group _leader;
+    private _groupRef = [] call KFH_fnc_getScalingTestAllyGroup;
     private _unit = _groupRef createUnit [missionNamespace getVariable ["KFH_scalingTestAllyClass", KFH_debugTeammateClass], _spawnPos, [], 0, "FORM"];
-    [_unit] joinSilent _groupRef;
-    _groupRef selectLeader _leader;
     _unit setName _name;
     _unit setSpeaker "NoVoice";
     _unit setVariable ["KFH_debugTeammate", true, true];
@@ -485,14 +508,17 @@ KFH_fnc_spawnScalingTestAlly = {
     };
 
     [_unit] call KFH_fnc_applyDebugTeammateCombatProfile;
+    _unit doFollow _leader;
     [_unit] call KFH_fnc_applyPrototypeCarryCapacity;
     [_unit, "Medikit"] call KFH_fnc_addInventoryItem;
     [_unit] call KFH_fnc_applyFriendlyFireMitigation;
+    [_unit] call KFH_fnc_protectFriendlyRating;
     [_unit] call KFH_fnc_updateSavedLoadout;
 
     private _allies = missionNamespace getVariable ["KFH_scalingTestAllies", []];
     _allies pushBackUnique _unit;
     missionNamespace setVariable ["KFH_scalingTestAllies", _allies, true];
+    [_unit, "scaling ally spawn"] call KFH_fnc_cleanupDuplicateFriendlyBodies;
     [format ["Scaling test ally %1 joined the patrol.", _name]] call KFH_fnc_log;
 
     _unit
@@ -575,6 +601,12 @@ KFH_fnc_debugTeammateLoop = {
             ) then {
                 private _leader = _players select 0;
                 private _current = missionNamespace getVariable ["KFH_debugTeammate", objNull];
+
+                if (!isNull _current && {!alive _current} && {missionNamespace getVariable ["KFH_debugTeammateKilledFallbackEnabled", true]}) then {
+                    [_current, objNull] call KFH_fnc_replaceKilledDebugTeammateWithDowned;
+                    missionNamespace setVariable ["KFH_nextDebugTeammateSpawnAt", time + KFH_debugTeammateRespawnDelay];
+                    _current = missionNamespace getVariable ["KFH_debugTeammate", objNull];
+                };
 
                 if (isNull _current || {!alive _current}) then {
                     if ((count _downedHumans) > 0) then {
@@ -858,10 +890,12 @@ KFH_fnc_scalingTestAllyLoop = {
                     if (isNull _ally || {!alive _ally}) then {
                         [_leader, _i] call KFH_fnc_spawnScalingTestAlly;
                     } else {
-                        if ((group _ally) != (group _leader)) then {
-                            [_ally] joinSilent (group _leader);
+                        private _allyGroup = [] call KFH_fnc_getScalingTestAllyGroup;
+                        if ((group _ally) != _allyGroup) then {
+                            [_ally] joinSilent _allyGroup;
                         };
                         [_ally] call KFH_fnc_applyDebugTeammateCombatProfile;
+                        _ally doFollow _leader;
                         if (
                             !(_ally getVariable ["KFH_aiReviveBusy", false]) &&
                             {!([_leader] call KFH_fnc_isIncapacitated)} &&

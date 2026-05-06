@@ -105,21 +105,9 @@ KFH_fnc_handleCivilianKilled = {
     if !(_friendlyCaused) exitWith {};
 
     _unit setVariable ["KFH_civilianPenaltyHandled", true, true];
-    private _penalty = missionNamespace getVariable ["KFH_civilianKillPressurePenalty", 8];
-    if (_penalty > 0) then {
-        private _pressure = missionNamespace getVariable ["KFH_pressure", 0];
-        ["KFH_pressure", (_pressure + _penalty) min KFH_pressureMax] call KFH_fnc_setState;
-    };
 
-    private _killerName = if (isNull _effectiveSource) then { "unknown" } else { name _effectiveSource };
-    [format ["Civilian casualty caused by %1. Pressure penalty=%2.", _killerName, _penalty], "CIV"] call KFH_fnc_appendRunEvent;
-
-    if ((random 1) <= (missionNamespace getVariable ["KFH_civilianKillExplosionChance", 0.08])) then {
-        private _pos = getPosATL _unit;
-        private _explosionClass = missionNamespace getVariable ["KFH_civilianKillExplosionClass", "Bo_Mk82"];
-        createVehicle [_explosionClass, _pos, [], 0, "CAN_COLLIDE"];
-        [format ["Civilian panic explosion triggered at %1.", mapGridPosition _pos], "CIV"] call KFH_fnc_appendRunEvent;
-            ["civilian_panic_explosion"] call KFH_fnc_notifyAllKey;
+    if (!isNull _effectiveSource) then {
+        [_effectiveSource] call KFH_fnc_protectFriendlyRating;
     };
 };
 
@@ -159,6 +147,26 @@ KFH_fnc_applyFriendlyFireMitigation = {
     }];
 
     _unit setVariable ["KFH_ffMitigationInstalled", true];
+};
+
+KFH_fnc_protectFriendlyRating = {
+    params ["_unit"];
+
+    if (isNull _unit) exitWith {};
+    _unit setVariable ["KFH_friendlyRatingProtected", true, true];
+    _unit addRating (100000 - (rating _unit));
+
+    if !(_unit getVariable ["KFH_friendlyRatingHandlerInstalled", false]) then {
+        _unit setVariable ["KFH_friendlyRatingHandlerInstalled", true];
+        _unit addEventHandler ["HandleRating", {
+            params ["_unit", "_rating"];
+            if (_unit getVariable ["KFH_friendlyRatingProtected", false]) then {
+                0
+            } else {
+                _rating
+            }
+        }];
+    };
 };
 
 KFH_fnc_playUiCue = {
@@ -1157,13 +1165,31 @@ KFH_fnc_placePlayerAtDynamicStartOnce = {
     private _targetPos = [
         (_startPos select 0) + (sin _angle) * _radius,
         (_startPos select 1) + (cos _angle) * _radius,
-        0
+        missionNamespace getVariable ["KFH_initialPlacementGroundZ", 0.05]
     ];
 
     player setDir (markerDir "kfh_start");
-    player setPosATL _targetPos;
+    [player, _targetPos, "dynamic start"] call KFH_fnc_placeUnitOnGroundSafeLocal;
     player setVariable ["KFH_dynamicStartPlaced", true, true];
-    [format ["Patrol start synced to dynamic route: %1", mapGridPosition _startPos]] call KFH_fnc_log;
+    [format ["Patrol start synced to dynamic route: %1 posATL=%2", mapGridPosition _startPos, getPosATL player]] call KFH_fnc_log;
+};
+
+KFH_fnc_placePlayerAtTemporaryGroundStartLocal = {
+    if (player getVariable ["KFH_tempGroundStartPlaced", false]) exitWith {};
+    if !("kfh_start" in allMapMarkers) exitWith {};
+
+    private _startPos = getMarkerPos "kfh_start";
+    if ((_startPos distance2D [0, 0, 0]) < 100) exitWith {};
+
+    private _targetPos = [
+        _startPos select 0,
+        _startPos select 1,
+        missionNamespace getVariable ["KFH_initialPlacementGroundZ", 0.05]
+    ];
+    player setDir (markerDir "kfh_start");
+    [player, _targetPos, "temporary start"] call KFH_fnc_placeUnitOnGroundSafeLocal;
+    player setVariable ["KFH_tempGroundStartPlaced", true, true];
+    [format ["Temporary ground start applied for %1 at %2 posATL=%3.", name player, mapGridPosition _targetPos, getPosATL player]] call KFH_fnc_log;
 };
 
 KFH_fnc_placeJipPlayerNearLeaderOnce = {
@@ -1190,18 +1216,56 @@ KFH_fnc_placeJipPlayerNearLeaderOnce = {
     private _targetPos = [
         (_anchorPos select 0) + (sin _angle) * _radius,
         (_anchorPos select 1) + (cos _angle) * _radius,
-        0
+        missionNamespace getVariable ["KFH_initialPlacementGroundZ", 0.05]
     ];
 
     player setDir _dir;
-    player setPosATL _targetPos;
+    [player, _targetPos, "JIP start"] call KFH_fnc_placeUnitOnGroundSafeLocal;
     player setVariable ["KFH_jipJoinPlaced", true, true];
     [format [
-        "JIP player %1 joined near %2 at %3.",
+        "JIP player %1 joined near %2 at %3 posATL=%4.",
         name player,
         if (!isNull _anchor) then { name _anchor } else { "respawn anchor" },
-        mapGridPosition _targetPos
+        mapGridPosition _targetPos,
+        getPosATL player
     ]] call KFH_fnc_log;
+};
+
+KFH_fnc_placeUnitOnGroundSafeLocal = {
+    params ["_unit", "_targetPos", ["_reason", "placement"]];
+
+    if (isNull _unit) exitWith {};
+    if ((count _targetPos) < 2) exitWith {};
+
+    private _groundZ = missionNamespace getVariable ["KFH_initialPlacementGroundZ", 0.05];
+    private _safePos = [_targetPos select 0, _targetPos select 1, _groundZ];
+    _unit allowDamage false;
+    _unit setVelocity [0, 0, 0];
+    _unit setPosATL _safePos;
+
+    [_unit, _safePos, _reason] spawn {
+        params ["_unit", "_safePos", "_reason"];
+
+        private _until = time + (missionNamespace getVariable ["KFH_initialPlacementSettleSeconds", 3.5]);
+        while {
+            !isNull _unit &&
+            {alive _unit} &&
+            {time < _until}
+        } do {
+            private _atl = getPosATL _unit;
+            if ((_atl select 2) > 2 || {surfaceIsWater _atl}) then {
+                _unit setVelocity [0, 0, 0];
+                _unit setPosATL _safePos;
+                [format ["Initial placement guard reapplied reason=%1 unit=%2 posATL=%3 target=%4.", _reason, name _unit, _atl, _safePos]] call KFH_fnc_log;
+            };
+            sleep 0.25;
+        };
+        if (!isNull _unit && {alive _unit} && {!([_unit] call KFH_fnc_isIncapacitated)}) then {
+            _unit setVelocity [0, 0, 0];
+            _unit allowDamage true;
+            [format ["Initial placement settled reason=%1 unit=%2 posATL=%3.", _reason, name _unit, getPosATL _unit]] call KFH_fnc_log;
+        };
+    };
 };
 
 KFH_fnc_spawnOutbreakObject = {
@@ -1257,12 +1321,14 @@ KFH_fnc_spawnCheckpointMobilityVehicles = {
 
     if !(missionNamespace getVariable ["KFH_checkpointMobilityVehiclesEnabled", true]) exitWith { [] };
 
-    private _classes = [
+    private _probeClass = [
         missionNamespace getVariable ["KFH_checkpointMobilityVehicleClasses", []],
         missionNamespace getVariable ["KFH_cupCheckpointMobilityVehicleClasses", []],
-        missionNamespace getVariable ["KFH_cupVehiclePreferredChance", 0.9]
-    ] call KFH_fnc_selectExistingWithOptionalPriority;
-    if (_classes isEqualTo "") exitWith { [] };
+        missionNamespace getVariable ["KFH_cupVehiclePreferredChance", 0.9],
+        missionNamespace getVariable ["KFH_checkpointMobilityMinVehicleSeats", 2],
+        "checkpoint mobility"
+    ] call KFH_fnc_selectPassengerVehicleClass;
+    if (_probeClass isEqualTo "") exitWith { [] };
 
     private _scale = ([] call KFH_fnc_getScalingPlayerCount) max 1;
     private _scaleCounts = missionNamespace getVariable ["KFH_checkpointMobilityVehicleCountByScale", []];
@@ -1290,12 +1356,15 @@ KFH_fnc_spawnCheckpointMobilityVehicles = {
         private _className = [
             missionNamespace getVariable ["KFH_checkpointMobilityVehicleClasses", []],
             missionNamespace getVariable ["KFH_cupCheckpointMobilityVehicleClasses", []],
-            missionNamespace getVariable ["KFH_cupVehiclePreferredChance", 0.9]
-        ] call KFH_fnc_selectExistingWithOptionalPriority;
+            missionNamespace getVariable ["KFH_cupVehiclePreferredChance", 0.9],
+            missionNamespace getVariable ["KFH_checkpointMobilityMinVehicleSeats", 2],
+            "checkpoint mobility"
+        ] call KFH_fnc_selectPassengerVehicleClass;
 
         if !(_className isEqualTo "") then {
             private _object = [_className, _markerName, [_rightOffset, _forwardOffset, _heightOffset], _dirOffset, 0, true, _assetDirCorrection] call KFH_fnc_spawnOutbreakObject;
             if !(isNull _object) then {
+                [format ["checkpoint %1 mobility", _checkpointIndex], _className] call KFH_fnc_logVehicleCapacity;
                 _object setFuel (_fuelMin + random ((_fuelMax - _fuelMin) max 0.01));
                 _object setDamage 0;
                 _object lock 0;

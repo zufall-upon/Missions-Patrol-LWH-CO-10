@@ -166,6 +166,58 @@ KFH_fnc_protectExtractionHeli = {
     } forEach crew _heli;
 };
 
+KFH_fnc_handleExtractionHeliLost = {
+    params ["_heli", ["_reason", "lost"]];
+
+    if ((missionNamespace getVariable ["KFH_phase", "boot"]) isNotEqualTo "extract") exitWith {};
+    if (_heli getVariable ["KFH_extractionLossHandled", false]) exitWith {};
+    _heli setVariable ["KFH_extractionLossHandled", true, true];
+
+    private _remainingHelis = (missionNamespace getVariable ["KFH_extractionHelis", []]) select {
+        !isNull _x && {alive _x} && {!(_x isEqualTo _heli)}
+    };
+    missionNamespace setVariable ["KFH_extractionHelis", _remainingHelis, true];
+    missionNamespace setVariable ["KFH_extractionHeli", if ((count _remainingHelis) > 0) then { _remainingHelis select 0 } else { objNull }, true];
+
+    [format ["Extraction heli lost: reason=%1 remaining=%2.", _reason, count _remainingHelis], "EXTRACT"] call KFH_fnc_appendRunEvent;
+    if ((count _remainingHelis) isEqualTo 0) then {
+        [false, ["mission_failed_heli_lost"] call KFH_fnc_localizeAnnouncement] call KFH_fnc_completeMission;
+    };
+};
+
+KFH_fnc_installExtractionHeliDamageGuard = {
+    params ["_heli"];
+
+    if (isNull _heli) exitWith {};
+    if (_heli getVariable ["KFH_extractionHeliDamageGuardInstalled", false]) exitWith {};
+    _heli setVariable ["KFH_extractionHeliDamageGuardInstalled", true, true];
+
+    _heli addEventHandler ["HandleDamage", {
+        params ["_heli", "_selection", "_incomingDamage", "_source"];
+
+        if (missionNamespace getVariable ["KFH_extractionHeliInvulnerable", true]) exitWith {
+            [_heli] call KFH_fnc_protectExtractionHeli;
+            0
+        };
+        _incomingDamage
+    }];
+    _heli addEventHandler ["Hit", {
+        params ["_heli", "_source", "_damage"];
+        [format [
+            "Extraction heli hit: heli=%1 source=%2 damage=%3 state=%4.",
+            typeOf _heli,
+            if (isNull _source) then { "unknown" } else { typeOf _source },
+            _damage,
+            _heli getVariable ["KFH_extractionHeliState", "unknown"]
+        ]] call KFH_fnc_log;
+        [_heli] call KFH_fnc_protectExtractionHeli;
+    }];
+    _heli addEventHandler ["Killed", {
+        params ["_heli", "_killer"];
+        [_heli, format ["killed by %1", if (isNull _killer) then { "unknown" } else { typeOf _killer }]] call KFH_fnc_handleExtractionHeliLost;
+    }];
+};
+
 KFH_fnc_getExtractionFlightVectors = {
     params [["_extractPosOverride", []]];
 
@@ -282,6 +334,7 @@ KFH_fnc_spawnSingleExtractionHeli = {
         _x allowFleeing 0;
     } forEach units _group;
     [_heli] call KFH_fnc_protectExtractionHeli;
+    [_heli] call KFH_fnc_installExtractionHeliDamageGuard;
     [_heli] spawn KFH_fnc_extractionHeliLoop;
 
     _heli
@@ -580,30 +633,7 @@ KFH_fnc_extractionHeliLoop = {
         sleep 2;
     };
 
-    if ((missionNamespace getVariable ["KFH_phase", "boot"]) isEqualTo "extract") then {
-        private _remainingHelis = (missionNamespace getVariable ["KFH_extractionHelis", []]) select {
-            !isNull _x && {alive _x} && {!(_x isEqualTo _heli)}
-        };
-        missionNamespace setVariable ["KFH_extractionHelis", _remainingHelis, true];
-        missionNamespace setVariable ["KFH_extractionHeli", if ((count _remainingHelis) > 0) then { _remainingHelis select 0 } else { objNull }, true];
-        if ((count _remainingHelis) > 0) exitWith {};
-
-        private _retries = (missionNamespace getVariable ["KFH_extractionHeliRetryCount", 0]) + 1;
-        private _retryLimit = missionNamespace getVariable ["KFH_extractionHeliBackupRetryLimit", 2];
-        missionNamespace setVariable ["KFH_extractionHeli", objNull, true];
-        missionNamespace setVariable ["KFH_extractionHelis", [], true];
-        missionNamespace setVariable ["KFH_extractionHeliState", "idle", true];
-        if (_retries <= _retryLimit) then {
-            missionNamespace setVariable ["KFH_extractionHeliRetryCount", _retries, true];
-            ["backup_pickup"] call KFH_fnc_notifyAllKey;
-            [] spawn {
-                sleep (missionNamespace getVariable ["KFH_extractionHeliBackupRetryDelaySeconds", 4]);
-                [] call KFH_fnc_spawnExtractionHeli;
-            };
-        } else {
-            [false, ["mission_failed_heli_lost"] call KFH_fnc_localizeAnnouncement] call KFH_fnc_completeMission;
-        };
-    };
+    [_heli, "loop ended"] call KFH_fnc_handleExtractionHeliLost;
 };
 
 KFH_fnc_buildExtractionFinaleSpecialQueue = {
@@ -731,7 +761,7 @@ KFH_fnc_reportFlareLaunch = {
 
     private _extractPos = getMarkerPos (missionNamespace getVariable ["KFH_extractMarker", "kfh_extract"]);
     if ((_origin distance2D _extractPos) > KFH_extractFlareRadius) exitWith {
-        [format ["Flare ignored: not close enough to LZ (%1m).", round (_origin distance2D _extractPos)]] call KFH_fnc_log;
+        [format ["Flare ignored: not close enough to LZ (%1m) weapon=%2 ammo=%3.", round (_origin distance2D _extractPos), _weaponClass, _ammoClass]] call KFH_fnc_log;
     };
 
     missionNamespace setVariable ["KFH_extractFlareFired", true, true];

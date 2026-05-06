@@ -79,6 +79,8 @@ KFH_fnc_clientTopHudLoop = {
         if ([] call KFH_fnc_ensureTopHudControls) then {
             private _phase = missionNamespace getVariable ["KFH_phase", "boot"];
             private _wave = missionNamespace getVariable ["KFH_currentWave", 0];
+            private _initialCombatReleased = missionNamespace getVariable ["KFH_initialCombatReleased", false];
+            private _prepareActive = (_phase isEqualTo "assault") && {!_initialCombatReleased} && {_wave isEqualTo 0};
             private _objectiveHostiles = missionNamespace getVariable ["KFH_objectiveHostiles", 0];
             private _totalHostiles = missionNamespace getVariable ["KFH_totalHostiles", 0];
             private _pendingHostiles = missionNamespace getVariable ["KFH_rushDebtCount", 0];
@@ -95,7 +97,12 @@ KFH_fnc_clientTopHudLoop = {
             private _checkpointValue = missionNamespace getVariable ["KFH_currentCheckpointValue", "LOW"];
             private _returnDangerLabel = missionNamespace getVariable ["KFH_returnDangerLabel", "LOW"];
             private _nextWaveAt = missionNamespace getVariable ["KFH_nextWaveAt", time];
+            private _warmupUntil = missionNamespace getVariable ["KFH_initialWaveWarmupUntil", -1];
+            if (_prepareActive && {_warmupUntil > 0}) then {
+                _nextWaveAt = _warmupUntil;
+            };
             private _nextWaveRemaining = ceil ((_nextWaveAt - time) max 0);
+            private _headerLabel = if (_prepareActive) then { "PREPARE" } else { format ["WAVE %1", _wave] };
             private _rushLabel = if (_rushActive) then {
                 "<t color='#ffb347'>RUSH ACTIVE</t>"
             } else {
@@ -106,6 +113,13 @@ KFH_fnc_clientTopHudLoop = {
                 }
             };
             private _showCaptureBar = _captureActive && {_captureProgress > 0.001};
+            if (_prepareActive) then {
+                _objectiveHostiles = 0;
+                _displayTotalHostiles = 0;
+                _rushLabel = "Wave 1 warming up";
+                _captureLabel = "READY UP";
+                _showCaptureBar = false;
+            };
             private _barColor = if (_showCaptureBar) then { [0.86, 0.58, 0.12, 0.96] } else { [0.25, 0.25, 0.25, 0.65] };
             private _text = uiNamespace getVariable ["KFH_topHudText", controlNull];
             private _barBack = uiNamespace getVariable ["KFH_topHudBarBack", controlNull];
@@ -113,8 +127,8 @@ KFH_fnc_clientTopHudLoop = {
             private _barWidth = safeZoneW * 0.24 * ((_captureProgress max 0) min 1);
 
             private _hudText = parseText format [
-                "<t align='center' size='0.92' font='PuristaBold'>WAVE %1 | NEXT %9s | %8</t><br/><t align='center' size='0.62'>CP %10/%11 %12 | Hostiles %3/%4 | Pressure %5/%6 | %2</t><br/><t align='center' size='0.58' color='#ffd166'>%7</t>",
-                _wave,
+                "<t align='center' size='0.92' font='PuristaBold'>%1 | NEXT %9s | %8</t><br/><t align='center' size='0.62'>CP %10/%11 %12 | Hostiles %3/%4 | Pressure %5/%6 | %2</t><br/><t align='center' size='0.58' color='#ffd166'>%7</t>",
+                _headerLabel,
                 _rushLabel,
                 _objectiveHostiles,
                 _displayTotalHostiles,

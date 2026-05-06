@@ -140,10 +140,10 @@ class Params
     };
     class KFH_CivilianSuicideBombFrequency
     {
-        title = "Civilian Kill Explosion Chance";
+        title = "Civilian Kill Explosion Chance (Disabled)";
         values[] = {0,5,8,15,25};
         texts[] = {"0%","5%","8%","15%","25%"};
-        default = 8;
+        default = 0;
     };
     class KFH_ParamsHeader_Local
     {

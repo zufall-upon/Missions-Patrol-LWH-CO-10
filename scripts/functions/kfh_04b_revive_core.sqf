@@ -54,6 +54,102 @@ KFH_fnc_getMonitoredFriendlies = {
     _friendlies
 };
 
+KFH_fnc_cleanupFriendlyCorpse = {
+    params ["_corpse", ["_activeUnit", objNull], ["_reason", "cleanup"]];
+
+    if (isNull _corpse) exitWith { false };
+    if (alive _corpse) exitWith { false };
+    if (_corpse getVariable ["KFH_draggedBodyBusy", false]) exitWith { false };
+    if !(isNull (_corpse getVariable ["KFH_draggedBy", objNull])) exitWith { false };
+    if (_corpse getVariable ["KFH_manualReviveTargetBusy", false]) exitWith { false };
+
+    private _corpseName = name _corpse;
+    private _activeName = if (isNull _activeUnit) then { "<none>" } else { name _activeUnit };
+    private _corpseType = typeOf _corpse;
+    deleteVehicle _corpse;
+    [format [
+        "Friendly corpse cleanup reason=%1 corpse=%2 active=%3 type=%4.",
+        _reason,
+        _corpseName,
+        _activeName,
+        _corpseType
+    ]] call KFH_fnc_log;
+
+    true
+};
+
+KFH_fnc_cleanupDuplicateFriendlyBodies = {
+    params ["_activeUnit", ["_reason", "duplicate cleanup"]];
+
+    if (isNull _activeUnit) exitWith { 0 };
+
+    private _activeName = name _activeUnit;
+    private _activeUid = if (isPlayer _activeUnit) then { getPlayerUID _activeUnit } else { "" };
+    private _activeDebug = (_activeUnit getVariable ["KFH_debugTeammate", false]) || {_activeUnit getVariable ["KFH_soloWingman", false]};
+    private _activeScaleIndex = _activeUnit getVariable ["KFH_scalingTestAllyIndex", -1];
+    private _removed = 0;
+
+    {
+        private _body = _x;
+        private _bodyUid = if (isPlayer _body) then { getPlayerUID _body } else { "" };
+        private _samePlayer = !(_activeUid isEqualTo "") && {_bodyUid isEqualTo _activeUid};
+        private _sameDebug = _activeDebug && {(_body getVariable ["KFH_debugTeammate", false]) || {_body getVariable ["KFH_soloWingman", false]}};
+        private _sameScale = _activeScaleIndex >= 0 && {(_body getVariable ["KFH_scalingTestAllyIndex", -2]) isEqualTo _activeScaleIndex};
+        private _sameName = (_activeName isEqualTo (name _body)) && {side group _body isEqualTo side group _activeUnit};
+
+        if (_body isNotEqualTo _activeUnit && {_samePlayer || {_sameDebug || {_sameScale || {_sameName}}}}) then {
+            if ([_body, _activeUnit, _reason] call KFH_fnc_cleanupFriendlyCorpse) then {
+                _removed = _removed + 1;
+            };
+        };
+    } forEach allDeadMen;
+
+    if (_removed > 0) then {
+        [format ["Duplicate friendly body cleanup active=%1 reason=%2 removed=%3.", _activeName, _reason, _removed]] call KFH_fnc_log;
+    };
+
+    _removed
+};
+
+KFH_fnc_replaceKilledDebugTeammateWithDowned = {
+    params ["_corpse", ["_killer", objNull]];
+
+    if (!isServer) exitWith {
+        [_corpse, _killer] remoteExecCall ["KFH_fnc_replaceKilledDebugTeammateWithDowned", 2];
+    };
+    if (isNull _corpse) exitWith {};
+    if !((_corpse getVariable ["KFH_debugTeammate", false]) || {_corpse getVariable ["KFH_soloWingman", false]}) exitWith {};
+    if !(missionNamespace getVariable ["KFH_debugTeammateKilledFallbackEnabled", true]) exitWith {};
+
+    private _players = [] call KFH_fnc_getHumanPlayers;
+    private _rescuers = _players select { alive _x && {!([_x] call KFH_fnc_isIncapacitated)} };
+    if ((count _rescuers) isEqualTo 0) exitWith {};
+
+    private _corpsePos = getPosATL _corpse;
+    private _corpseDir = getDir _corpse;
+    private _corpseLoadout = getUnitLoadout _corpse;
+    missionNamespace setVariable ["KFH_debugTeammate", objNull, true];
+
+    [_corpse, objNull, "Echo killed fallback pre-spawn"] call KFH_fnc_cleanupFriendlyCorpse;
+
+    private _leader = _rescuers select 0;
+    private _replacement = [_leader] call KFH_fnc_spawnDebugTeammate;
+    if (isNull _replacement) exitWith {};
+
+    if ((count _corpseLoadout) > 0) then {
+        _replacement setUnitLoadout _corpseLoadout;
+    };
+    _replacement setPosATL _corpsePos;
+    _replacement setDir _corpseDir;
+    [_replacement, objNull, "Echo killed fallback downed"] call KFH_fnc_forceUnitDowned;
+    [_replacement, "Echo killed fallback"] call KFH_fnc_cleanupDuplicateFriendlyBodies;
+    [format [
+        "Echo killed fallback restored downed wingman at death position. Killer=%1 replacement=%2.",
+        if (isNull _killer) then { "unknown" } else { typeOf _killer },
+        name _replacement
+    ]] call KFH_fnc_log;
+};
+
 KFH_fnc_getAliveMonitoredFriendlies = {
     ([] call KFH_fnc_getMonitoredFriendlies) select {
         alive _x
@@ -660,6 +756,7 @@ KFH_fnc_reviveUnitFromDowned = {
 
     private _wasForcedDowned = _casualty getVariable ["KFH_forcedDowned", false];
     [_casualty, _graceSeconds <= 0] call KFH_fnc_clearDownedState;
+    [_casualty, "revive complete"] call KFH_fnc_cleanupDuplicateFriendlyBodies;
     [format [
         "Revive completed casualty=%1 forced=%2 vehicleCasualty=%3 damage=%4",
         name _casualty,

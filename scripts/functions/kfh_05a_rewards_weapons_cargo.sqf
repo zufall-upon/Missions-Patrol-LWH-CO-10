@@ -22,7 +22,7 @@ KFH_fnc_getCheckpointRewardTierName = {
 KFH_fnc_addOptionalWeaponCargo = {
     params ["_cache", "_className", ["_count", 1]];
 
-    if (isClass (configFile >> "CfgWeapons" >> _className)) then {
+    if (["CfgWeapons", _className] call KFH_fnc_isRewardConfigClassAllowed) then {
         _cache addWeaponCargoGlobal [_className, _count];
         true
     } else {
@@ -33,7 +33,7 @@ KFH_fnc_addOptionalWeaponCargo = {
 KFH_fnc_addOptionalItemCargo = {
     params ["_cache", "_className", ["_count", 1]];
 
-    if (isClass (configFile >> "CfgWeapons" >> _className)) then {
+    if (["CfgWeapons", _className] call KFH_fnc_isRewardConfigClassAllowed) then {
         _cache addItemCargoGlobal [_className, _count];
         true
     } else {
@@ -44,7 +44,7 @@ KFH_fnc_addOptionalItemCargo = {
 KFH_fnc_addOptionalMagazineCargo = {
     params ["_cache", "_className", ["_count", 1]];
 
-    if (isClass (configFile >> "CfgMagazines" >> _className)) then {
+    if (["CfgMagazines", _className] call KFH_fnc_isRewardConfigClassAllowed) then {
         _cache addMagazineCargoGlobal [_className, _count];
         true
     } else {
@@ -62,10 +62,10 @@ KFH_fnc_selectAvailableConfigClass = {
     ];
 
     private _vanilla = _vanillaClasses select {
-        (_allowEmpty && {_x isEqualTo ""}) || {isClass (configFile >> _configRoot >> _x)}
+        (_allowEmpty && {_x isEqualTo ""}) || {[_configRoot, _x] call KFH_fnc_isRewardConfigClassAllowed}
     };
     private _optional = if (missionNamespace getVariable ["KFH_cupOptionalEnabled", true]) then {
-        _optionalClasses select { isClass (configFile >> _configRoot >> _x) }
+        _optionalClasses select { [_configRoot, _x] call KFH_fnc_isRewardConfigClassAllowed }
     } else {
         []
     };
@@ -88,8 +88,8 @@ KFH_fnc_isWeaponBundleAvailable = {
     private _weaponClass = _bundle select 0;
     private _magazineClass = _bundle select 1;
 
-    (isClass (configFile >> "CfgWeapons" >> _weaponClass)) &&
-    {isClass (configFile >> "CfgMagazines" >> _magazineClass)}
+    (["CfgWeapons", _weaponClass] call KFH_fnc_isRewardConfigClassAllowed) &&
+    {["CfgMagazines", _magazineClass] call KFH_fnc_isRewardConfigClassAllowed}
 };
 
 KFH_fnc_stringContainsAny = {
@@ -123,7 +123,7 @@ KFH_fnc_selectDynamicRhsMagazine = {
 
     private _magazines = (getArray (_weaponCfg >> "magazines")) + ([_weaponCfg] call KFH_fnc_getWeaponMagazineWellMagazines);
     private _usable = _magazines select {
-        isClass (configFile >> "CfgMagazines" >> _x) &&
+        (["CfgMagazines", _x] call KFH_fnc_isRewardConfigClassAllowed) &&
         {!([_x, ["grenade", "flare", "signal", "smoke"]] call KFH_fnc_stringContainsAny)}
     };
 
@@ -175,7 +175,12 @@ KFH_fnc_buildDynamicRhsRewardBundles = {
             private _scope = getNumber (_cfg >> "scope");
             private _displayName = getText (_cfg >> "displayName");
             private _category = [_className, _displayName] call KFH_fnc_getDynamicRhsRewardCategory;
-            if (_scope >= 2 && {!(_displayName isEqualTo "")} && {(count _category) > 0}) then {
+            if (
+                _scope >= 2 &&
+                {!(_displayName isEqualTo "")} &&
+                {(count _category) > 0} &&
+                {["CfgWeapons", _className] call KFH_fnc_isRewardConfigClassAllowed}
+            ) then {
                 _category params ["_categoryName", "_minTier", "_magazineCount", "_attachments"];
                 private _categoryCount = switch (_categoryName) do {
                     case "shotgun": { _shotguns };
@@ -417,7 +422,7 @@ KFH_fnc_addRewardBackpacks = {
 KFH_fnc_addScaledBackpackCargo = {
     params ["_cache", ["_backpacks", []], ["_coverageRatio", 0.25], ["_minCount", 1]];
 
-    private _available = _backpacks select { isClass (configFile >> "CfgVehicles" >> _x) };
+    private _available = _backpacks select { ["CfgVehicles", _x] call KFH_fnc_isRewardConfigClassAllowed };
     if ((count _available) isEqualTo 0) exitWith { 0 };
 
     private _players = [] call KFH_fnc_getRewardPlayerCount;
@@ -447,7 +452,9 @@ KFH_fnc_addRewardWeaponBundle = {
     [_cache, _magazineClass, (_magazineCount * _weaponCount) + _playerBonusMags] call KFH_fnc_addOptionalMagazineCargo;
     {
         [_cache, _x, _weaponCount] call KFH_fnc_addOptionalItemCargo;
-    } forEach ([_weaponClass, _attachments] call KFH_fnc_filterCompatibleWeaponAttachments);
+    } forEach (([_weaponClass, _attachments] call KFH_fnc_filterCompatibleWeaponAttachments) select {
+        ["CfgWeapons", _x] call KFH_fnc_isRewardConfigClassAllowed
+    });
 
     true
 };
@@ -468,7 +475,9 @@ KFH_fnc_addRecentRewardBundleCargo = {
                 private _attachments = if ((count _x) > 3) then { _x select 3 } else { [] };
                 {
                     [_cache, _x, 1] call KFH_fnc_addOptionalItemCargo;
-                } forEach ([_weaponClass, _attachments] call KFH_fnc_filterCompatibleWeaponAttachments);
+                } forEach (([_weaponClass, _attachments] call KFH_fnc_filterCompatibleWeaponAttachments) select {
+                    ["CfgWeapons", _x] call KFH_fnc_isRewardConfigClassAllowed
+                });
             };
         };
     } forEach (missionNamespace getVariable ["KFH_recentRewardWeaponBundles", []]);
@@ -595,7 +604,7 @@ KFH_fnc_isMagazineCompatibleWithWeapon = {
 
     private _weaponCfg = configFile >> "CfgWeapons" >> _weaponClass;
     if !(isClass _weaponCfg) exitWith { false };
-    if !(isClass (configFile >> "CfgMagazines" >> _magazineClass)) exitWith { false };
+    if !(["CfgMagazines", _magazineClass] call KFH_fnc_isRewardConfigClassAllowed) exitWith { false };
 
     private _magazines = getArray (_weaponCfg >> "magazines");
     if (_magazineClass in _magazines) exitWith { true };
@@ -613,7 +622,7 @@ KFH_fnc_addSideCacheM4LargeMagazineCargo = {
     params ["_cache"];
 
     private _weaponClasses = (missionNamespace getVariable ["KFH_sideCacheM4LargeMagazineWeapons", []]) select {
-        isClass (configFile >> "CfgWeapons" >> _x)
+        ["CfgWeapons", _x] call KFH_fnc_isRewardConfigClassAllowed
     };
     if ((count _weaponClasses) isEqualTo 0) exitWith { 0 };
 
@@ -648,6 +657,7 @@ KFH_fnc_addSideCacheM4LargeMagazineCargo = {
             {(getNumber (_x >> "count")) >= _minAmmo} &&
             {[_haystack, _tokens] call KFH_fnc_stringContainsAny} &&
             {!([_haystack, _excludeTokens] call KFH_fnc_stringContainsAny)} &&
+            {["CfgMagazines", _className] call KFH_fnc_isRewardConfigClassAllowed} &&
             {[_weaponClasses, _className] call KFH_fnc_isMagazineCompatibleWithAnyWeapon}
         ) then {
             [_cache, _className, _countPerType] call KFH_fnc_addOptionalMagazineCargo;
@@ -694,8 +704,23 @@ KFH_fnc_unitHasFlareCapability = {
     private _weapons = weapons _unit;
     private _magazines = magazines _unit;
 
+    _magazines append (primaryWeaponMagazine _unit);
+    _magazines append (secondaryWeaponMagazine _unit);
+    _magazines append (handgunMagazine _unit);
+    {
+        if ((count _x) > 0) then {
+            _magazines pushBackUnique (_x select 0);
+        };
+    } forEach (magazinesAmmoFull _unit);
+
     (_weapons findIf { _x isEqualTo "hgun_Pistol_Signal_F" }) >= 0 ||
-    {(_magazines findIf { (_x find "Signal") >= 0 || {(_x find "Flare") >= 0} }) >= 0}
+    {(_magazines findIf {
+        private _magazineClass = _x;
+        private _ammoClass = getText (configFile >> "CfgMagazines" >> _magazineClass >> "ammo");
+        (_magazineClass find "Signal") >= 0 ||
+        {(_magazineClass find "Flare") >= 0} ||
+        {!(_ammoClass isEqualTo "") && {["", _ammoClass] call KFH_fnc_isFlareShot}}
+    }) >= 0}
 };
 
 KFH_fnc_teamHasFlareCapability = {

@@ -122,7 +122,6 @@ KFH_fnc_spawnGroupWave = {
             _unit setDir ([_unit, _moveTargetPos] call BIS_fnc_dirTo);
             _groupRef selectLeader _unit;
             _spawnedUnits pushBack _unit;
-            _groupRef move _moveTargetPos;
         };
     };
 
@@ -365,6 +364,70 @@ KFH_fnc_spawnCheckpointWave = {
     _spawnedUnits
 };
 
+KFH_fnc_spawnCheckpointAssaultBurst = {
+    params ["_checkpointIndex", "_checkpointMarker", ["_reason", "no_threats"]];
+
+    if !(missionNamespace getVariable ["KFH_checkpointAssaultBurstEnabled", true]) exitWith { [] };
+
+    private _checkpointPos = getMarkerPos _checkpointMarker;
+    private _burstKey = format ["KFH_checkpointAssaultBurstCount_%1", _checkpointIndex];
+    private _burstCount = missionNamespace getVariable [_burstKey, 0];
+    private _maxBursts = missionNamespace getVariable ["KFH_checkpointAssaultBurstMaxPerCheckpoint", 2];
+    if (_burstCount >= _maxBursts) exitWith { [] };
+
+    private _cooldownKey = format ["KFH_checkpointAssaultBurstNextAt_%1", _checkpointIndex];
+    if (time < (missionNamespace getVariable [_cooldownKey, 0])) exitWith { [] };
+
+    private _playerAnchor = [_checkpointPos] call KFH_fnc_getWavePlayerAnchor;
+    private _spawnAnchorPos = if (isNull _playerAnchor) then { _checkpointPos } else { getPosATL _playerAnchor };
+    private _moveTargetPos = if (isNull _playerAnchor) then { _checkpointPos } else { getPosATL _playerAnchor };
+    private _unitCount = missionNamespace getVariable ["KFH_checkpointAssaultBurstCount", 5];
+    private _spawnedUnits = [
+        _spawnAnchorPos,
+        [],
+        _unitCount,
+        0,
+        0,
+        missionNamespace getVariable ["KFH_checkpointAssaultBurstHeavyChance", 0.02],
+        _moveTargetPos,
+        format ["cp%1-assault-burst-%2", _checkpointIndex, _burstCount + 1],
+        _checkpointPos,
+        _playerAnchor
+    ] call KFH_fnc_spawnGroupWave;
+
+    if ((count _spawnedUnits) > 0) then {
+        private _activeEnemies = missionNamespace getVariable ["KFH_activeEnemies", []];
+        _activeEnemies append _spawnedUnits;
+        missionNamespace setVariable ["KFH_activeEnemies", _activeEnemies];
+
+        private _objectiveEnemies = missionNamespace getVariable ["KFH_currentObjectiveEnemies", []];
+        _objectiveEnemies append _spawnedUnits;
+        missionNamespace setVariable ["KFH_currentObjectiveEnemies", _objectiveEnemies];
+        missionNamespace setVariable ["KFH_currentWaveHostileCount", count _objectiveEnemies, true];
+        missionNamespace setVariable ["KFH_objectiveClearCooldownAppliedWave", -1, true];
+        ["KFH_objectiveHostiles", count _objectiveEnemies] call KFH_fnc_setState;
+        ["KFH_totalHostiles", count _activeEnemies] call KFH_fnc_setState;
+
+        missionNamespace setVariable [_burstKey, _burstCount + 1, true];
+        missionNamespace setVariable [
+            _cooldownKey,
+            time + (missionNamespace getVariable ["KFH_checkpointAssaultBurstCooldown", 15]),
+            true
+        ];
+        [format [
+            "Checkpoint assault burst spawned: cp=%1 count=%2 burst=%3/%4 reason=%5 target=%6.",
+            _checkpointIndex,
+            count _spawnedUnits,
+            _burstCount + 1,
+            _maxBursts,
+            _reason,
+            if (isNull _playerAnchor) then { "checkpoint" } else { name _playerAnchor }
+        ]] call KFH_fnc_log;
+    };
+
+    _spawnedUnits
+};
+
 KFH_fnc_spawnExtractWave = {
     private _extractMarker = missionNamespace getVariable ["KFH_extractMarker", ""];
 
@@ -557,9 +620,14 @@ KFH_fnc_onCheckpointSecured = {
                 _x setDamage 0;
             };
         } forEach _supportObjects;
+        [_checkpointMarker, _checkpointIndex] call KFH_fnc_upgradeCheckpointSupplyReward;
         [_checkpointMarker] call KFH_fnc_spawnOptionalArsenalBase;
         [KFH_finalArsenalCooldownSeconds, "arsenal secured"] call KFH_fnc_applyWaveCooldown;
         ["finalCheckpoint", _checkpointIndex] call KFH_fnc_playStoryBeatOnce;
+        ["checkpoint_reward_cache", [
+            _checkpointIndex,
+            [_checkpointIndex] call KFH_fnc_getCheckpointRewardTierName
+        ]] call KFH_fnc_notifyAllKey;
         ["final_checkpoint_arsenal_marked"] call KFH_fnc_notifyAllKey;
     };
 };
@@ -648,8 +716,47 @@ KFH_fnc_releaseInitialWave = {
     if (missionNamespace getVariable ["KFH_initialWaveSpawnStarted", false]) exitWith { false };
     if ((missionNamespace getVariable ["KFH_currentWave", 0]) > 0) exitWith { false };
 
+    private _warmupSeconds = missionNamespace getVariable ["KFH_initialWaveWarmupSeconds", 60];
+    private _warmupUntil = missionNamespace getVariable ["KFH_initialWaveWarmupUntil", -1];
+    private _warmupReady = true;
+    if (_warmupSeconds > 0) then {
+        if (_warmupUntil < 0) then {
+            private _preReleaseEnemies = (missionNamespace getVariable ["KFH_activeEnemies", []]) select { !isNull _x };
+            if ((count _preReleaseEnemies) > 0) then {
+                {
+                    private _groupRef = group _x;
+                    deleteVehicle _x;
+                    if (!isNull _groupRef && {({alive _x} count units _groupRef) isEqualTo 0}) then {
+                        deleteGroup _groupRef;
+                    };
+                } forEach _preReleaseEnemies;
+                missionNamespace setVariable ["KFH_activeEnemies", []];
+                missionNamespace setVariable ["KFH_currentObjectiveEnemies", []];
+                ["KFH_objectiveHostiles", 0] call KFH_fnc_setState;
+                ["KFH_totalHostiles", 0] call KFH_fnc_setState;
+                missionNamespace setVariable ["KFH_currentWaveHostileCount", 0, true];
+                [format ["Initial warmup purged %1 pre-release hostile(s) before Wave 1.", count _preReleaseEnemies]] call KFH_fnc_log;
+            };
+            _warmupUntil = time + _warmupSeconds;
+            missionNamespace setVariable ["KFH_initialWaveWarmupActive", true, true];
+            missionNamespace setVariable ["KFH_initialWaveWarmupUntil", _warmupUntil, true];
+            missionNamespace setVariable ["KFH_nextReinforceAt", _warmupUntil];
+            missionNamespace setVariable ["KFH_nextWaveAt", _warmupUntil, true];
+            missionNamespace setVariable ["KFH_currentWaveHostileCount", 0, true];
+            ["KFH_objectiveHostiles", 0] call KFH_fnc_setState;
+            ["KFH_totalHostiles", 0] call KFH_fnc_setState;
+            ["KFH_waveCooldownReason", "initial warmup"] call KFH_fnc_setState;
+            [format ["Initial wave warmup started: %1s before Wave 1 (reason=%2 ready=%3/%4).", round _warmupSeconds, _reason, _readyCount, _humanCount]] call KFH_fnc_log;
+            [format ["Warmup: Wave 1 starts in %1s.", round _warmupSeconds], "RUN"] call KFH_fnc_appendRunEvent;
+        };
+        _warmupReady = time >= _warmupUntil;
+    };
+    if (!_warmupReady) exitWith { false };
+    [format ["Initial wave warmup complete; spawning Wave 1 (reason=%1 ready=%2/%3).", _reason, _readyCount, _humanCount]] call KFH_fnc_log;
+
     missionNamespace setVariable ["KFH_initialWaveSpawnStarted", true, true];
     missionNamespace setVariable ["KFH_initialCombatReleased", true, true];
+    missionNamespace setVariable ["KFH_initialWaveWarmupActive", false, true];
 
     if ((_reason find "ready") >= 0) then {
         [format ["Initial wave released after player starter loadout readiness (%1/%2 ready, reason=%3).", _readyCount, _humanCount, _reason]] call KFH_fnc_log;
@@ -666,6 +773,7 @@ KFH_fnc_releaseInitialWave = {
     };
 
     [1, 1, true] call KFH_fnc_spawnCheckpointWave;
+    [([KFH_reinforceSeconds] call KFH_fnc_getPressureReinforceSeconds), "initial wave deployed"] call KFH_fnc_applyWaveCooldown;
     true
 };
 
