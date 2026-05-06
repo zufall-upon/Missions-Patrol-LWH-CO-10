@@ -8,9 +8,11 @@ KFH_fnc_isFriendlyDragTarget = {
     private _needsHelp = (!alive _candidate) || {[_candidate] call KFH_fnc_isIncapacitated};
     if !(_needsHelp) exitWith { false };
 
-    ((side group _candidate) isEqualTo (side group _caller)) ||
+    (isPlayer _candidate && {isPlayer _caller}) ||
+    {((side group _candidate) isEqualTo (side group _caller))} ||
     {_candidate getVariable ["KFH_debugTeammate", false]} ||
-    {_candidate getVariable ["KFH_soloWingman", false]}
+    {_candidate getVariable ["KFH_soloWingman", false]} ||
+    {_candidate in ([] call KFH_fnc_getMonitoredFriendlies)}
 };
 
 KFH_fnc_getReviveActionBlockReason = {
@@ -34,10 +36,10 @@ KFH_fnc_getReviveActionBlockReason = {
     };
     if ((vehicle _candidate) isNotEqualTo _candidate) exitWith { format ["needs_vehicle_pull vehicle=%1", typeOf (vehicle _candidate)] };
     if ((_candidate distance2D _caller) > _range) exitWith { format ["distance=%1 range=%2", round (_candidate distance2D _caller), _range] };
-    if (_candidate getVariable ["KFH_manualReviveTargetBusy", false]) exitWith { format ["target_manual_busy medic=%1", name (_candidate getVariable ["KFH_manualReviveTargetMedic", objNull])] };
+    if (_candidate getVariable ["KFH_manualReviveTargetBusy", false]) exitWith { format ["target_manual_busy_stale_or_active medic=%1", name (_candidate getVariable ["KFH_manualReviveTargetMedic", objNull])] };
     if (_candidate getVariable ["KFH_aiReviveTargetBusy", false]) exitWith { format ["target_ai_busy medic=%1", name (_candidate getVariable ["KFH_aiReviveTargetMedic", objNull])] };
-    if (_candidate getVariable ["KFH_draggedBodyBusy", false]) exitWith { format ["target_dragged_by=%1", name (_candidate getVariable ["KFH_draggedBy", objNull])] };
-    if !(((side group _candidate) isEqualTo (side group _caller)) || {_candidate getVariable ["KFH_debugTeammate", false]} || {_candidate getVariable ["KFH_soloWingman", false]}) exitWith {
+    if (_candidate getVariable ["KFH_draggedBodyBusy", false]) exitWith { format ["target_dragged_stale_or_active by=%1", name (_candidate getVariable ["KFH_draggedBy", objNull])] };
+    if !([_candidate, _caller] call KFH_fnc_isFriendlyDragTarget) exitWith {
         format ["side_mismatch caller=%1 target=%2", side group _caller, side group _candidate]
     };
 
@@ -129,10 +131,35 @@ KFH_fnc_isFriendlyReviveTarget = {
     if !([_candidate, _caller] call KFH_fnc_isFriendlyDragTarget) exitWith { false };
     if !(alive _candidate) exitWith { false };
     if !([_candidate] call KFH_fnc_isIncapacitated) exitWith { false };
-    if (_candidate getVariable ["KFH_manualReviveTargetBusy", false]) exitWith { false };
-    if (_candidate getVariable ["KFH_draggedBodyBusy", false]) exitWith { false };
 
     true
+};
+
+KFH_fnc_prepareManualReviveTargetLocal = {
+    params ["_caller", "_casualty"];
+
+    if (isNull _casualty) exitWith {};
+
+    private _dragCarrier = _casualty getVariable ["KFH_draggedBy", objNull];
+    if (!isNull _dragCarrier) then {
+        [_dragCarrier, _casualty, "manual-revive-prep"] remoteExecCall ["KFH_fnc_cleanupDraggingBodyLocal", _dragCarrier];
+    };
+    if (_casualty getVariable ["KFH_draggedBodyBusy", false]) then {
+        [objNull, _casualty, "manual-revive-prep-casualty"] call KFH_fnc_cleanupDraggingBodyLocal;
+    };
+
+    _casualty setVariable ["KFH_manualReviveTargetBusy", false, true];
+    _casualty setVariable ["KFH_manualReviveTargetMedic", objNull, true];
+    _casualty setVariable ["KFH_aiReviveTargetBusy", false, true];
+    _casualty setVariable ["KFH_aiReviveTargetMedic", objNull, true];
+    _casualty setVariable ["KFH_aiReviveTargetBusyAt", -1, true];
+    _casualty setVariable ["KFH_draggedBodyBusy", false, true];
+    _casualty setVariable ["KFH_draggedBy", objNull, true];
+    _casualty setVariable ["KFH_dragPoseRefreshActive", false, true];
+
+    if ((vehicle _casualty) isNotEqualTo _casualty) then {
+        [_casualty, _caller, "manual revive auto-pull"] call KFH_fnc_extractCasualtyFromVehicle;
+    };
 };
 
 KFH_fnc_isFriendlyBodyDragTarget = {
@@ -227,10 +254,7 @@ KFH_fnc_reviveNearbyAllyLocal = {
         [_caller, "manual-revive-no-target"] call KFH_fnc_logReviveActionDiag;
         ["revive_no_ally"] call KFH_fnc_localNotifyKey;
     };
-    if ((vehicle _casualty) isNotEqualTo _casualty) exitWith {
-        [format ["Manual revive blocked by vehicle casualty caller=%1 casualty=%2 vehicle=%3", name _caller, name _casualty, typeOf (vehicle _casualty)]] call KFH_fnc_log;
-        ["revive_pull_vehicle_first"] call KFH_fnc_localNotifyKey;
-    };
+    [_caller, _casualty] call KFH_fnc_prepareManualReviveTargetLocal;
 
     _caller setVariable ["KFH_manualReviveBusy", true];
     _casualty setVariable ["KFH_manualReviveTargetBusy", true, true];
@@ -248,8 +272,9 @@ KFH_fnc_reviveNearbyAllyLocal = {
             {alive _caller} &&
             {alive _casualty} &&
             {[_casualty] call KFH_fnc_isIncapacitated} &&
-            {(_caller distance2D _casualty) <= ((missionNamespace getVariable ["KFH_playerReviveActionDistance", 4]) + 0.75)}
+            {(_caller distance2D (vehicle _casualty)) <= ((missionNamespace getVariable ["KFH_playerReviveActionDistance", 4]) + 1.5)}
         ) then {
+            [_caller, _casualty] call KFH_fnc_prepareManualReviveTargetLocal;
             [_casualty] call KFH_fnc_reviveUnitFromDowned;
             ["manual_revived_player", [name _caller, name _casualty]] call KFH_fnc_notifyAllKey;
         } else {
